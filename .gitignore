@@ -1,0 +1,28 @@
+# Dependencies installed by npm (can be reinstalled with npm install)
+node_modules/
+
+# Environment variables: Ignores secret environment files like API keys. Push only .env.example
+.env
+.env.local
+
+# Build outputs: Ignores production build output
+dist/
+build/
+
+# Vite / cache: Ignores Vite's cache and output directories
+.vite/
+.cache/
+
+# Logs: Ignores err/debug logs created by package managers
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS files: Ignores system files created by macOS and Windows
+.DS_Store
+Thumbs.db
+
+# Editor folders: Ignores config settings from vscode, intellij, etc.
+.vscode/
+.idea/
