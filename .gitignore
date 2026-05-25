@@ -4,6 +4,8 @@ node_modules/
 # Environment variables: Ignores secret environment files like API keys. Push only .env.example
 .env
 .env.local
+frontend/.env
+frontend/.env.local
 
 # Build outputs: Ignores production build output
 dist/

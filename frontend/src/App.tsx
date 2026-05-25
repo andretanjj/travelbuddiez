@@ -1,11 +1,9 @@
-// import { useState } from 'react'
-// import reactLogo from './assets/react.svg'
-// import viteLogo from './assets/vite.svg'
-// import heroImg from './assets/hero.png'
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Home from './pages/Home.tsx'
-import Comingsoon from './pages/Comingsoon.tsx'
-import Navbar from "./components/navbar.tsx";
+import Home from "./pages/Home.tsx";
+import ExploreMapPage from "./pages/ExploreMapPage.tsx";
+import ComingSoon from "./pages/ComingSoon.tsx";
+import Navbar from "./components/Navbar.tsx";
+
 
 function App() {
   return (
@@ -13,9 +11,9 @@ function App() {
       <Navbar />
       <Routes>
         <Route path="/" element={<Home />} />
-        <Route path="/map" element={<Comingsoon />} />
-        <Route path="/planning" element={<Comingsoon />} />
-        <Route path="/about" element={<Comingsoon />} />
+        <Route path="/map" element={<ExploreMapPage />} />
+        <Route path="/planning" element={<ComingSoon />} />
+        <Route path="/about" element={<ComingSoon />} />
       </Routes>
     </BrowserRouter>
   );
