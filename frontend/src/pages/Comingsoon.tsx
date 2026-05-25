@@ -1,5 +1,6 @@
 import './Comingsoon.css'
 
+// this is the ComingSoon Page
 function Comingsoon() {
   return (
     <div className="page-content">
