@@ -1,0 +1,35 @@
+.navbar {
+  height: 60px;
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 60px;
+  background: rgba(0, 0, 0, 0.9);
+}
+
+.logo {
+  font-family: 'Dancing Script', cursive;
+  font-size: 20px;
+  font-weight: 800;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.847);
+}
+
+.nav-pages {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.nav-pages a {
+  text-decoration: none;
+  color: rgba(255, 255, 255, 0.847);
+  font-size: 14px;
+  font-weight: 500;
+  
+}
+
+.nav-pages a:hover {
+  color: #2563eb;
+}
