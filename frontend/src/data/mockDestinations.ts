@@ -1,29 +1,31 @@
-export type RiskLevel = "Low" | "Medium" | "High";
+import type { Destination } from "../types/country.ts";
 
-export interface MockDestination {
-  countryCode: string; // ISO A3 code for later backend integration
-  country: string;
-  travelScore: number;
-  riskLevel: RiskLevel;
-}
-
-export const mockDestinations: MockDestination[] = [
+export const mockDestinations: Destination[] = [
   {
     countryCode: "SGP",
     country: "Singapore",
-    travelScore: 85,
+    travelScore: 88,
     riskLevel: "Low",
+    condition: "Safe",
+    weather: "Warm and humid, no major weather warnings.",
+    news: "No major travel-related disruptions reported.",
   },
   {
     countryCode: "JPN",
     country: "Japan",
-    travelScore: 70,
+    travelScore: 72,
     riskLevel: "Medium",
+    condition: "Weather Risk",
+    weather: "Possible heavy rain in selected regions.",
+    news: "Some areas are monitoring weather-related disruptions.",
   },
   {
     countryCode: "IDN",
     country: "Indonesia",
-    travelScore: 45,
+    travelScore: 48,
     riskLevel: "High",
+    condition: "Natural Disaster Risk",
+    weather: "Storm and flooding risk in selected regions.",
+    news: "Recent reports mention possible regional disruptions.",
   },
 ];
