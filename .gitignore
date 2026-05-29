@@ -6,6 +6,8 @@ node_modules/
 .env.local
 frontend/.env
 frontend/.env.local
+backend/.env
+backend/.env.local
 
 # Build outputs: Ignores production build output
 dist/
