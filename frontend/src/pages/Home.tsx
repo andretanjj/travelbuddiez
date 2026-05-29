@@ -1,11 +1,12 @@
-// src/pages/Home.tsx
 import { useEffect, useState } from "react"
 import { AnimatePresence, motion } from "motion/react";
+import { useNavigate } from "react-router-dom";
 import { FaPlane } from "react-icons/fa";
 import GlobeBackground from "../components/GlobeBackground";
 
 function Home() {
     const [loading, setLoading] = useState(true);
+    const navigate = useNavigate();
 
     useEffect(() => {
         const timer = setTimeout(() => { 
@@ -55,7 +56,7 @@ function Home() {
                     </p>
 
                     <button
-                        onClick={() => window.location.href = "/map"}
+                        onClick={() => navigate("/map")}
                         className="
                             rounded-lg border border-black bg-blue-600/80 px-7 py-3.5
                             font-['Manrope'] font-bold text-white shadow-lg transition-colors
