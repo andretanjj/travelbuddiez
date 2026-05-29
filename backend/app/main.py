@@ -17,6 +17,11 @@ print("News key loaded:", os.getenv("NEWS_API_KEY") is not None)
 
 app = FastAPI()
 
+allowed_origins = [
+    "http://localhost:5173",
+    "https://travelbuddiez.vercel.app/",
+]
+
 frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
 app.add_middleware(
