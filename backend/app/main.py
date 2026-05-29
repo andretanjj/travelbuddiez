@@ -8,6 +8,7 @@ from app.data.destinations import DESTINATIONS
 from app.services.weather_service import get_weather
 from app.services.news_service import get_news
 from app.services.advisory_service import get_advisory
+from app.data.travelscore import calculate_travelscore
 
 
 load_dotenv()
@@ -32,6 +33,33 @@ app.add_middleware(
 def root():
     return {"message": "TravelBuddiez backend is running"}
 
+@app.get("/destinations")
+def get_all_destinations():
+    results = []
+
+    for country_code, destination in DESTINATIONS.items():
+        weather = get_weather(destination["city"])
+        news = get_news(destination["country"])
+        advisory = get_advisory(country_code)
+
+        score_data = calculate_travelscore(weather, news, advisory)
+
+        results.append({
+            "countryCode": destination["countryCode"],
+            "country": destination["country"],
+            "city": destination["city"],
+
+            "travelScore": score_data["travelScore"],
+            "riskLevel": score_data["riskLevel"],
+            "condition": score_data["condition"],
+            "reasons": score_data["reasons"],
+
+            "weather": weather,
+            "news": news,
+            "advisory": advisory,
+        })
+
+    return results
 
 @app.get("/destinations/{country_code}")
 def get_destination(country_code: str):
@@ -46,13 +74,16 @@ def get_destination(country_code: str):
     news = get_news(destination["country"])
     advisory = get_advisory(country_code)
 
+    score_data = calculate_travelscore(weather, news, advisory)
+
     return {
         "countryCode": destination["countryCode"],
         "country": destination["country"],
-        "travelScore": destination["travelScore"],
-        "riskLevel": destination["riskLevel"],
-        "condition": destination["condition"],
+        "travelScore": score_data["travelScore"],
+        "riskLevel": score_data["riskLevel"],
+        "condition": score_data["condition"],
         "weather": weather,
         "news": news,
         "advisory": advisory,
     }
+

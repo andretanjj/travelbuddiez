@@ -12,10 +12,13 @@ export type TravelCondition =
 export interface Destination {
   countryCode: string;
   country: string;
+  city: string;
   travelScore: number;
   riskLevel: RiskLevel;
-  condition: TravelCondition;
+  condition: string;
+  reasons: string[];
   weather: string;
   news: string;
+  advisory: string
 }
 
