@@ -4,6 +4,9 @@ import { Link, useParams } from "react-router-dom";
 // OLD VERSION: used frontend mock data before backend integration
 // import { mockDestinations } from "../data/mockDestinations";
 
+// NEW VERSION: USING BACKEND API DATA
+import { getDestinationByCountryCode } from "../services/destinationApi";
+
 import type { Destination } from "../types/country";
 
 function getRiskBadgeClass(riskLevel: Destination["riskLevel"]): string {
@@ -38,26 +41,12 @@ function DestinationDashboardPage() {
       return;
     }
 
-    // backend base URL from frontend .env file
-    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
-
-    async function fetchDestination() {
+    async function fetchDestination(countryCode: string) {
       try {
         setIsLoading(true);
         setErrorMessage("");
 
-        // fetch destination data from FastAPI backend
-        const response = await fetch(
-          `${apiBaseUrl}/destinations/${countryCode}`
-        );
-
-        // if backend returns 404 or another error, show error state
-        if (!response.ok) {
-          throw new Error("Destination not found");
-        }
-
-        // convert backend JSON response into Destination type
-        const data: Destination = await response.json();
+        const data = await getDestinationByCountryCode(countryCode);
 
         setDestination(data);
       } catch {
@@ -68,7 +57,7 @@ function DestinationDashboardPage() {
       }
     }
 
-    fetchDestination();
+    fetchDestination(countryCode);
   }, [countryCode]);
 
   if (isLoading) {

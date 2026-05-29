@@ -4,7 +4,12 @@ import { AnimatePresence } from "motion/react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 
+// OLD VERSION USING MOCK DATA
 import { mockDestinations } from "../data/mockDestinations";
+
+// NEW VERSION USING BACKEND API DATA (TO BE IMPLEMENTED LTATER)
+// import { getDestinationByCountryCode } from "../services/destinationApi";
+
 import CountryTooltip from "./CountryTooltip.tsx";
 import type { Destination } from "../types/country";
 
@@ -212,10 +217,6 @@ function MapView() {
             const countryCode = feature.properties?.["ISO3166-1-Alpha-3"];
 
             if (typeof countryCode !== "string") return;
-
-            const destination = findDestinationByCountryCode(countryCode);
-
-            if (destination === undefined) return;
 
             navigate(`/destinations/${countryCode}`);
         });
