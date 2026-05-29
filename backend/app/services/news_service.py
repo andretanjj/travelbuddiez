@@ -11,7 +11,11 @@ def get_news(country: str) -> str:
     url = "https://newsapi.org/v2/everything"
 
     params = {
-        "q": f"{country} travel safety weather disruption",
+        "q": (
+            f'"{country}" AND '
+            '(travel OR tourist OR tourism OR flight OR airport OR weather OR disaster OR warning OR advisory OR safety) '
+            'NOT stock NOT market NOT shares NOT currency NOT forex NOT yen NOT dollar NOT economy'
+        ),
         "language": "en",
         "sortBy": "publishedAt",
         "pageSize": 1,

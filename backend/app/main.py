@@ -11,6 +11,7 @@ from app.services.advisory_service import get_advisory
 
 
 load_dotenv()
+##debug
 print("OpenWeather key loaded:", os.getenv("OPENWEATHER_API_KEY") is not None)
 print("News key loaded:", os.getenv("NEWS_API_KEY") is not None)
 

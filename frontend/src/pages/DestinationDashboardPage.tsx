@@ -87,7 +87,7 @@ function DestinationDashboardPage() {
           </h1>
 
           <p className="mb-6 text-gray-600">
-            We do not have travel information for this country yet.
+            {errorMessage || "We do not have travel information for this country yet."}
           </p>
 
           <Link
