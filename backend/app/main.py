@@ -45,9 +45,9 @@ def get_destination(country_code: str):
     if destination is None:
         raise HTTPException(status_code=404, detail="Destination not found")
 
-    """ weather = get_weather(destination["city"])
+    weather = get_weather(destination["city"])
     news = get_news(destination["country"])
-    advisory = get_advisory(country_code) """
+    advisory = get_advisory(country_code)
 
     return {
         "countryCode": destination["countryCode"],
@@ -55,7 +55,7 @@ def get_destination(country_code: str):
         "travelScore": destination["travelScore"],
         "riskLevel": destination["riskLevel"],
         "condition": destination["condition"],
-         "weather": "Weather data placeholder",
-        "news": "News data placeholder",
-        "advisory": "Advisory data placeholder",
+         "weather": weather,
+        "news": news,
+        "advisory": advisory,
     }
