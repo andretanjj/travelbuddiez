@@ -20,7 +20,7 @@ function GlobeBackground() {
         const controls = globeRef.current.controls();
         controls.autoRotate = true;
         controls.autoRotateSpeed = 0.8;
-        controls.enableZoom = true;
+        controls.enableZoom = false;
     }, []);
 
     return (
