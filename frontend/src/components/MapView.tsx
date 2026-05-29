@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { AnimatePresence } from "motion/react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
@@ -22,10 +23,10 @@ function findDestinationByCountryCode(countryCode: string): Destination | undefi
 }
 
 // convert travel score into map color
-function getColor(score: number){
-    if (score >= 75) return "#9DE08B";
-    else if (score >= 50) return "#FFFE52";
-    return "#F50000";
+function getColor(score: number): string {
+    if (score >= 75) return "#29bd29";
+    else if (score >= 50) return "#ffff00";
+    return "#f32e2e";
 }
 
 function MapView() {
@@ -40,6 +41,9 @@ function MapView() {
 
   // React state for tooltip currently shown on hover
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
+
+  // allows this component to move to another page (DestinationDashboardPage)
+  const navigate = useNavigate();
 
   useEffect(() => {
 
@@ -59,14 +63,15 @@ function MapView() {
     });
 
     // ---------------------------------------------
-    // using mock data for now, will integrate with backend later
+    // Adds country polygon layers and uses mockDestinations as temp travel data.
+    // Later, mockDestinations will be replaced with backend API data.
     mapRef.current.on("load", () => {
         if (!mapRef.current) return; // null check insie load callback
         
         mapRef.current.addSource("countries", {
             type: "geojson",
             data: "/countries.geojson", // this file is in public folder, so it can be accessed directly
-            promoteId: "ISO3166-1-Alpha-3", // uses this as unique feature ID, required for setFeatureState hover styling
+            promoteId: "ISO3166-1-Alpha-3", // setFeatureState required feature id, promoteId promotes a property into feature id
         });
 
         mapRef.current.addLayer({
@@ -160,7 +165,7 @@ function MapView() {
                 mapRef.current.setFeatureState(
                 {
                     source: "countries",
-                    id: countryCode,
+                    id: countryCode, // promoteId reads "ISO..."" as the feature ID
                 },
                 {
                     hover: true,
@@ -197,6 +202,24 @@ function MapView() {
             mapRef.current.getCanvas().style.cursor = ""; // reset cursor back to default
             setTooltip(null);  // hide tooltip
         });
+
+        // click country polygon and go to destination dashboard page
+        mapRef.current.on("click", "country-fill", (event) => {
+            const feature = event.features?.[0];
+
+            if (feature === undefined) return;
+
+            const countryCode = feature.properties?.["ISO3166-1-Alpha-3"];
+
+            if (typeof countryCode !== "string") return;
+
+            const destination = findDestinationByCountryCode(countryCode);
+
+            if (destination === undefined) return;
+
+            navigate(`/destinations/${countryCode}`);
+        });
+
     });
     // ----------------------------------------------
 
