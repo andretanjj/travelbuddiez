@@ -2,7 +2,31 @@ def calculate_travelscore(weather, news, advisory):
     score = 100
     reasons = []
 
-    # Weather risk
+    weather_deduction = calculate_weather_deduction(weather)
+    score -= weather_deduction["deduction"]
+    reasons.extend(weather_deduction["reasons"])
+
+    news_deduction = calculate_news_deduction(news)
+    score -= news_deduction["deduction"]
+    reasons.extend(news_deduction["reasons"])
+
+    advisory_deduction = calculate_advisory_deduction(advisory)
+    score -= advisory_deduction["deduction"]
+    reasons.extend(advisory_deduction["reasons"])
+
+    score = max(0, min(score, 100))
+
+    return {
+        "travelScore": score,
+        "riskLevel": get_risk_level(score),
+        "condition": get_condition(reasons),
+    }
+
+
+def calculate_weather_deduction(weather):
+    deduction = 0
+    reasons = []
+
     weather_condition = ""
     temperature = None
 
@@ -19,11 +43,11 @@ def calculate_travelscore(weather, news, advisory):
             or weather.get("Temperature")
             or weather.get("temp")
         )
+
     elif isinstance(weather, str):
         weather_condition = weather.lower()
 
     bad_weather_keywords = [
-        "rain",
         "heavy rain",
         "thunderstorm",
         "storm",
@@ -36,30 +60,40 @@ def calculate_travelscore(weather, news, advisory):
     ]
 
     if any(keyword in weather_condition for keyword in bad_weather_keywords):
-        score -= 20
+        deduction += 20
         reasons.append("Weather risk")
 
     if temperature is not None:
         if temperature >= 35:
-            score -= 10
-            reasons.append("Extremely hot weather")
+            deduction += 10
+            reasons.append("Extreme temperature")
         elif temperature <= 0:
-            score -= 10
-            reasons.append("Extremely cold weather")
+            deduction += 10
+            reasons.append("Extreme temperature")
 
-    # News risk
+    return {
+        "deduction": deduction,
+        "reasons": reasons,
+    }
+
+
+def calculate_news_deduction(news):
+    deduction = 0
+    reasons = []
+
     news_articles = []
 
     if isinstance(news, dict):
         news_articles = news.get("articles", [])
     elif isinstance(news, list):
         news_articles = news
-    
+
     high_risk_news_keywords = [
         "earthquake",
         "tsunami",
         "war",
         "terror",
+        "terrorism",
         "attack",
         "riot",
         "volcano",
@@ -67,6 +101,16 @@ def calculate_travelscore(weather, news, advisory):
         "landslide",
         "wildfire",
         "flood",
+        "flooding",
+        "evacuation",
+        "emergency",
+        "disaster",
+        "typhoon",
+        "cyclone",
+        "hurricane",
+        "airport closed",
+        "flight cancelled",
+        "state of emergency",
     ]
 
     medium_risk_news_keywords = [
@@ -75,23 +119,51 @@ def calculate_travelscore(weather, news, advisory):
         "smoke",
         "haze",
         "warning",
-        "crashed",
-        "chaos",
-        "trouble",
+        "alert",
+        "advisory",
+        "delay",
+        "cancelled",
+        "disruption",
+        "unrest",
+        "demonstration",
+        "heavy rain",
+        "heatwave",
+        "storm",
     ]
 
+    high_risk_found = False
+    medium_risk_found = False
+
     for article in news_articles[:5]:
-        title = article.get("title", "").lower()
+        title = article.get("title", "")
+        description = article.get("description", "")
+        content = article.get("content", "")
+
+        news_text = f"{title} {description} {content}".lower()
 
         if any(keyword in news_text for keyword in high_risk_news_keywords):
-            score -= 25
-            reasons.append("High-risk news")
-        elif any(keyword in news_text for keyword in medium_risk_news_keywords):
-            score -= 10
-            reasons.append("News risk")
-        
+            high_risk_found = True
 
-    # travel advisory risk
+        elif any(keyword in news_text for keyword in medium_risk_news_keywords):
+            medium_risk_found = True
+
+    if high_risk_found:
+        deduction += 25
+        reasons.append("High-risk news")
+    elif medium_risk_found:
+        deduction += 10
+        reasons.append("News risk")
+
+    return {
+        "deduction": deduction,
+        "reasons": reasons,
+    }
+
+
+def calculate_advisory_deduction(advisory):
+    deduction = 0
+    reasons = []
+
     advisory_text = str(advisory).lower()
 
     high_risk_advisory_keywords = [
@@ -114,39 +186,40 @@ def calculate_travelscore(weather, news, advisory):
     ]
 
     if any(keyword in advisory_text for keyword in high_risk_advisory_keywords):
-        score -= 35
+        deduction += 35
         reasons.append("High travel advisory risk")
+
     elif any(keyword in advisory_text for keyword in medium_risk_advisory_keywords):
-        score -= 15
+        deduction += 15
         reasons.append("Travel advisory caution")
 
-    score = max(0, min(score, 100))
-
-    if score >= 75:
-        risk_level = "Low"
-    elif score >= 50:
-        risk_level = "Medium"
-    else:
-        risk_level = "High"
-
-    
-    # if "High travel advisory risk" in reasons:
-    #     condition = "Travel Advisory Risk"
-    if "High-risk news" in reasons:
-         condition = "News Risk"
-    elif "Weather risk" in reasons:
-        condition = "Weather Risk"
-    # elif "Travel advisory caution" in reasons:
-    #    condition = "Travel Advisory Caution"
-    elif "News risk" in reasons:
-         condition = "News Risk"
-    else:
-        condition = "No major safety risk"
-    
-
     return {
-        "travelScore": score,
-        "riskLevel": risk_level,
-        "condition": condition,
+        "deduction": deduction,
         "reasons": reasons,
     }
+
+
+def get_risk_level(score):
+    if score >= 75:
+        return "Low"
+    elif score >= 50:
+        return "Medium"
+    else:
+        return "High"
+
+
+def get_condition(reasons):
+    if "High travel advisory risk" in reasons:
+        return "Travel Advisory Risk"
+    elif "High-risk news" in reasons:
+        return "News Risk"
+    elif "Weather risk" in reasons:
+        return "Weather Risk"
+    elif "Travel advisory caution" in reasons:
+        return "Travel Advisory Caution"
+    elif "News risk" in reasons:
+        return "News Risk"
+    elif "Extreme temperature" in reasons:
+        return "Weather Risk"
+    else:
+        return "No major safety risk"

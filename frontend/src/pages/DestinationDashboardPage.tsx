@@ -4,6 +4,9 @@ import { Link, useParams } from "react-router-dom";
 // OLD VERSION: used frontend mock data before backend integration
 // import { mockDestinations } from "../data/mockDestinations";
 
+// NEW VERSION: USING BACKEND API DATA
+import { getDestinationByCountryCode } from "../services/destinationApi";
+
 import type { Destination } from "../types/country";
 
 function getRiskBadgeClass(riskLevel: Destination["riskLevel"]): string {
@@ -38,26 +41,12 @@ function DestinationDashboardPage() {
       return;
     }
 
-    // backend base URL from frontend .env file
-    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
-
-    async function fetchDestination() {
+    async function fetchDestination(countryCode: string) {
       try {
         setIsLoading(true);
         setErrorMessage("");
 
-        // fetch destination data from FastAPI backend
-        const response = await fetch(
-          `${apiBaseUrl}/destinations/${countryCode}`
-        );
-
-        // if backend returns 404 or another error, show error state
-        if (!response.ok) {
-          throw new Error("Destination not found");
-        }
-
-        // convert backend JSON response into Destination type
-        const data: Destination = await response.json();
+        const data = await getDestinationByCountryCode(countryCode);
 
         setDestination(data);
       } catch {
@@ -68,7 +57,7 @@ function DestinationDashboardPage() {
       }
     }
 
-    fetchDestination();
+    fetchDestination(countryCode);
   }, [countryCode]);
 
   if (isLoading) {
@@ -163,11 +152,51 @@ function DestinationDashboardPage() {
             </div>
 
             <div className="rounded-xl border border-gray-200 p-4">
-              <h2 className="mb-2 text-lg font-semibold text-gray-900">
-                News
+              <h2 className="mb-3 text-lg font-semibold text-gray-900">
+                Latest Travel-Related News
               </h2>
-              <p className="text-gray-700">{destination.news}</p>
+
+              <div className="max-h-72 space-y-3 overflow-y-auto pr-2">
+                {destination.news && destination.news.length > 0 ? (
+                  destination.news.map((article, index) => (
+                    <div
+                      key={index}
+                      className="rounded-xl bg-slate-50 p-3 text-gray-900"
+                    >
+                      {article.url ? (
+                        <a
+                          href={article.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-medium text-blue-700 hover:underline"
+                        >
+                          {article.title}
+                        </a>
+                      ) : (
+                        <p className="font-medium text-gray-900">{article.title}</p>
+                      )}
+
+                      {article.description && (
+                        <p className="mt-1 text-sm text-gray-600">
+                          {article.description}
+                        </p>
+                      )}
+
+                      {article.source?.name && (
+                        <p className="mt-2 text-xs text-gray-500">
+                          Source: {article.source.name}
+                        </p>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-gray-600">
+                    No major travel-related news found.
+                  </p>
+                )}
+              </div>
             </div>
+
           </div>
 
           <div className="mt-6 rounded-xl border border-dashed border-gray-300 p-4">
