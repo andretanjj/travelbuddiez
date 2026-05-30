@@ -45,9 +45,11 @@ function CountryTooltip({ destination, x, y}: CountryTooltipProps) {
       </div>
 
       <div className="space-y-1 text-sm text-gray-700">
-        <p>
-          <span className="font-medium text-gray-900">Travel Score:</span>{" "}
-          {destination.travelScore}/100
+        <p className="text-sm text-gray-600">
+          Map Score:{" "}
+          {destination.mapScore !== null && destination.mapScore !== undefined
+            ? `${destination.mapScore}/100`
+            : "N/A"}
         </p>
 
         <p>

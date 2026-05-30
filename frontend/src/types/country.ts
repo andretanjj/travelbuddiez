@@ -1,6 +1,4 @@
 // this is the data shape
-export type RiskLevel = "Low" | "Medium" | "High";
-
 export type TravelCondition =
     | "Safe"
     | "Weather Risk"
@@ -23,11 +21,17 @@ export interface Destination {
   countryCode: string;
   country: string;
   city: string;
-  travelScore: number;
-  riskLevel: RiskLevel;
-  condition: string;
-  weather: string;
-  news: NewsArticle[];
-  advisory: string;
-}
 
+  // Used by MapView and CountryTooltip.
+  mapScore?: number | null;
+
+  // Used by DestinationDashboardPage.
+  travelScore?: number;
+
+  riskLevel: "Low" | "Medium" | "High" | "Unknown";
+  condition: string;
+
+  weather?: unknown;
+  news?: NewsArticle[];
+  advisory?: unknown;
+}
