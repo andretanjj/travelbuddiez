@@ -5,10 +5,11 @@ import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 
 // OLD VERSION USING MOCK DATA
+// OLD VERSION USING MOCK DATA
 import { mockDestinations } from "../data/mockDestinations";
 
-// NEW VERSION USING BACKEND API DATA (TO BE IMPLEMENTED LTATER)
-// import { getDestinationByCountryCode } from "../services/destinationApi";
+// NEW VERSION USING BACKEND API DATA: TO BE IMPLEMENTED LATER ONCE DATABASE IS IN PLAY
+// import { getAllDestinations } from "../services/destinationApi";
 
 import CountryTooltip from "./CountryTooltip.tsx";
 import type { Destination } from "../types/country";
@@ -20,12 +21,19 @@ interface TooltipState {
     y: number;
 }
 
-// finds matching mock destination based on country code from GeoJSON
+// OLD VERSION: finds matching mock destination based on country code from GeoJSON
 function findDestinationByCountryCode(countryCode: string): Destination | undefined {
     return mockDestinations.find(
         (destination: Destination) => destination.countryCode === countryCode
     );
 }
+
+// NEW VERSION: finds matching backend data country: implement later
+/* function findDestinationByCountryCode(countryCode: string, destinations: Destination[]): Destination | undefined {
+    return destinations.find(
+        (destination: Destination) => destination.countryCode === countryCode
+    );
+} */
 
 // convert travel score into map color
 function getColor(score: number): string {
@@ -47,8 +55,26 @@ function MapView() {
   // React state for tooltip currently shown on hover
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
 
+  // to be implemented later once database is countries.
+  //const [destinations, setDestinations] = useState<Destination[]>([]);
+
   // allows this component to move to another page (DestinationDashboardPage)
   const navigate = useNavigate();
+
+  // fetch backend destinations before creating map: to be implemented later once database is introduced
+  /* useEffect(() => {
+    async function fetchDestinations() {
+        try {
+            const data = await getAllDestinations();
+            console.log("Backend destinations:", data);
+            setDestinations(data);
+        } catch (error) {
+            console.error("Failed to fetch destinations:", error);
+        }
+    }
+
+    fetchDestinations();
+}, []); */
 
   useEffect(() => {
 
@@ -64,7 +90,7 @@ function MapView() {
         basemap: { theme: "monochrome"},
       },
       center: [103.8198, 1.3521], // shows SG by default
-      zoom: 10,
+      zoom: 2.5,
     });
 
     // ---------------------------------------------
@@ -88,10 +114,24 @@ function MapView() {
                 "fill-color": [
                     "match",
                     ["get", "ISO3166-1-Alpha-3"],
+
+                    //OLD VERSION USING mockDestinations
                     ...mockDestinations.flatMap((destination) => [
                         destination.countryCode,
                         getColor(destination.travelScore),
                     ]),
+                    
+                    // NEW VERSION USING backend: implement later
+                    /* ...destinations.flatMap((destination) => {
+                        // in case backend fails to calculate travelScore
+                        if (destination.travelScore === undefined) {
+                            return[];
+                        }
+                        return [
+                            destination.countryCode,
+                            getColor(destination.travelScore),
+                        ];
+                    }), */
                     "transparent", // default color for countries not in the mock data
                 ],
 
@@ -177,11 +217,20 @@ function MapView() {
                 }
                 );
 
-                // find matching destination data from mockDestinations
+                // OLD VERSION: find matching destination data from mockDestinations
                 const destination = findDestinationByCountryCode(countryCode);
 
-                // if country not in mockDestinations, hide the tooltip
+                // NEW VERSION: implement later when database is introduced
+                // const destination = findDestinationByCountryCode(countryCode, destinations);
+
+                // OLD VERSION: if country not in mockDestinations
                 if (destination === undefined) {
+                    setTooltip(null);
+                    return;
+                }
+
+                // NEW VERSION: if country not in mockDestinations or backend fails to calculate travelScore, hide the tooltip
+                if (destination === undefined || destination.travelScore === undefined) {
                     setTooltip(null);
                     return;
                 }
@@ -218,6 +267,14 @@ function MapView() {
 
             if (typeof countryCode !== "string") return;
 
+            // OLD VERSION: only test mock countries
+            const destination = findDestinationByCountryCode(countryCode);
+
+            if (destination === undefined) {
+                console.log("No mock destination data for:", countryCode);
+                return;
+            }
+
             navigate(`/destinations/${countryCode}`);
         });
 
@@ -228,7 +285,7 @@ function MapView() {
       mapRef.current?.remove();
       mapRef.current = null;
     };
-  }, []);
+  }, [navigate]);
 
   return (
     <div className="relative h-full w-full">

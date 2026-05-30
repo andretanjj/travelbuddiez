@@ -9,13 +9,25 @@ export type TravelCondition =
     | "Social Unrest"
     | "Unknown"
 
+export interface NewsArticle {
+  title: string;
+  description?: string;
+  url?: string;
+  source?: {
+    name?: string;
+  };
+  publishedAt?: string;
+}
+
 export interface Destination {
   countryCode: string;
   country: string;
+  city: string;
   travelScore: number;
   riskLevel: RiskLevel;
-  condition: TravelCondition;
+  condition: string;
   weather: string;
-  news: string;
+  news: NewsArticle[];
+  advisory: string;
 }
 
