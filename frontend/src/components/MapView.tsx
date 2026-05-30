@@ -5,6 +5,7 @@ import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 
 // OLD VERSION USING MOCK DATA
+// OLD VERSION USING MOCK DATA
 import { mockDestinations } from "../data/mockDestinations";
 
 // NEW VERSION USING BACKEND API DATA: TO BE IMPLEMENTED LATER ONCE DATABASE IS IN PLAY
