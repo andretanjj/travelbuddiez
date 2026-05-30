@@ -148,7 +148,12 @@ function DestinationDashboardPage() {
               <h2 className="mb-2 text-lg font-semibold text-gray-900">
                 Weather
               </h2>
-              <p className="text-gray-700">{destination.weather}</p>
+
+              <p className="text-gray-700">
+                {typeof destination.weather === "string"
+                  ? destination.weather
+                  : "Weather information unavailable."}
+              </p>
             </div>
 
             <div className="rounded-xl border border-gray-200 p-4">
