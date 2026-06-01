@@ -37,11 +37,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-TEST_COUNTRY_CODES = [
+## debug
+""" TEST_COUNTRY_CODES = [
     "SGP",
     "IDN",
     "JPN",
-]
+] """
 
 # Fetch advisories once when the backend starts.
 # This avoids calling the advisory API every time MapView loads.
@@ -86,8 +87,8 @@ def get_destination(country_code: str):
     """
     country_code = country_code.upper()
 
-    if country_code not in TEST_COUNTRY_CODES:
-        raise HTTPException(status_code=404, detail="Destination not available in test mode")
+    # if country_code not in TEST_COUNTRY_CODES:
+    #     raise HTTPException(status_code=404, detail="Destination not available in test mode")
 
     destination = DESTINATIONS.get(country_code)
 
