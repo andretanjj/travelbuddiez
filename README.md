@@ -448,21 +448,22 @@ The backend includes basic error handling so that the frontend can display fallb
 ## Database and Caching Plan
 A database has not been implemented in Milestone 1. However, database storage is an important part of the future design.
 
-**Why a Database Is Needed**
+**Why a Database Is Needed**<br>
 Without a database, the backend may need to call external APIs repeatedly. This can make the application slower and may hit API rate limits. A database allows the system to store processed destination data and reuse it until it becomes outdated.
 
-**Planned Cached Data Flow**
-Scheduled refresh or user request
- ↓
-Backend fetches weather, news, and advisory data
- ↓
-Backend calculates travel score
- ↓
-Backend stores result in database
- ↓
+**Planned Cached Data Flow**<br>
+
+Scheduled refresh or user request<br>
+↓<br>
+Backend fetches weather, news, and advisory data<br>
+↓<br>
+Backend calculates travel score<br>
+↓<br>
+Backend stores result in database<br>
+↓<br>
 Map and dashboard read cached result
 
-**Planned Refresh Strategy**
+**Planned Refresh Strategy**<br>
 A simple future refresh strategy is:
 - Weather data: refresh every few hours.
 - News data: refresh every 6-12 hours.
