@@ -1,15 +1,13 @@
 # TravelBuddiez
 ### One Stop to all your Travel Needs
 
-Team Name: TravelBuddiez
-Team ID: 6821
+Team Name: TravelBuddiez  
+Team ID: 6821  
 Target Level of Achievement: Apollo 11
 
 Link to web application: https://travelbuddiez.vercel.app/
 
 ## Table of Contents
-## Table of Contents
-
 <ul>
   <li><a href="#description">Description</a></li>
   <li><a href="#motivation">Motivation</a></li>
