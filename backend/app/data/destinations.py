@@ -13,10 +13,15 @@ def load_geojson_countries():
 
 
 def load_capital_overrides():
-    response = requests.get(REST_COUNTRIES_URL)
+    response = requests.get(REST_COUNTRIES_URL, timeout=10)
     response.raise_for_status()
 
     countries = response.json()
+
+    if not isinstance(countries, list):
+            print("REST Countries returned unexpected data:", countries)
+            return {}
+            
     city_overrides = {}
 
     for country in countries:
@@ -42,7 +47,7 @@ for feature in countries_geojson["features"]:
     properties = feature.get("properties", {})
     country_code = properties.get("ISO3166-1-Alpha-3")
     country_name = properties.get("name")
-    country_code_iso2 = properties.get("ISO3166-1-Alpha-2").lower() #this is for worldnewsAPI as it uses ISO2 country code
+    country_code_iso2 = properties.get("ISO3166-1-Alpha-2", "").lower() #this is for worldnewsAPI as it uses ISO2 country code
 
     if not country_code or not country_name:
         continue
