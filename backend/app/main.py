@@ -7,12 +7,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.data.destinations import DESTINATIONS
 from app.services.weather_service import get_weather
 from app.services.news_service import get_news
-from app.services.advisory_service import get_advisory
-from app.services.map_advisory_service import (
+from app.services.advisory_service import (
     fetch_us_travel_advisories,
+    get_advisory,
     get_map_data_for_destination,
 )
 from app.data.travelscore import calculate_travelscore
+
+from app.services.nlp_service import rank_news_articles
 
 
 
@@ -96,8 +98,14 @@ def get_destination(country_code: str):
         raise HTTPException(status_code=404, detail="Destination not found")
 
     weather = get_weather(destination["city"])
-    news = get_news(destination["newsCode"], destination["country"])
-    advisory = get_advisory(country_code)
+    advisory = get_advisory(destination, US_ADVISORY_MAP)
+
+    # Fetch normalized news articles from World News API.
+    news_articles = get_news(destination["newsCode"], destination["country"])
+
+    # Rank the articles using the NLP service.
+    # This uses Gemini Embeddings + Python cosine similarity
+    news = rank_news_articles(news_articles, country_code, top_k=10)
 
     score_data = calculate_travelscore(weather, news, advisory)
 

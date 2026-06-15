@@ -78,6 +78,13 @@ def calculate_weather_deduction(weather):
 
 
 def calculate_news_deduction(news):
+    """
+    If top ranked news contains serious risk: deduct 25
+    Else if it contains medium risk: deduct 10
+    Recovery/improvement news: no deduction
+    No risky news: no deduction
+    """
+    
     deduction = 0
     reasons = []
 
@@ -109,8 +116,12 @@ def calculate_news_deduction(news):
         "cyclone",
         "hurricane",
         "airport closed",
+        "airport closure",
         "flight cancelled",
+        "flight canceled",
         "state of emergency",
+        "do not travel",
+        "avoid travel",
     ]
 
     medium_risk_news_keywords = [
@@ -122,24 +133,55 @@ def calculate_news_deduction(news):
         "alert",
         "advisory",
         "delay",
+        "delayed",
         "cancelled",
+        "canceled",
         "disruption",
         "unrest",
         "demonstration",
         "heavy rain",
         "heatwave",
         "storm",
+        "travel caution",
+        "transport disruption",
+    ]
+
+    recovery_keywords = [
+        "reopen",
+        "reopened",
+        "reopening",
+        "resume",
+        "resumed",
+        "resuming",
+        "restored",
+        "recovered",
+        "recovery",
+        "eased",
+        "lifted",
+        "lowered",
+        "improved",
+        "normal operations",
+        "services resume",
+        "restrictions eased",
+        "advisory lowered",
     ]
 
     high_risk_found = False
     medium_risk_found = False
 
+    # Check only the top 5 ranked articles.
+    # These are already filtered and summarized by nlp_service.py.
     for article in news_articles[:5]:
         title = article.get("title", "")
         description = article.get("description", "")
+        abstracted_summary = article.get("abstractedSummary", "")
         content = article.get("content", "")
 
-        news_text = f"{title} {description} {content}".lower()
+        news_text = f"{title} {description} {abstracted_summary} {content}".lower()
+
+        # Positive/recovery news should not reduce the score.
+        if any(keyword in news_text for keyword in recovery_keywords):
+            continue
 
         if any(keyword in news_text for keyword in high_risk_news_keywords):
             high_risk_found = True
@@ -150,6 +192,7 @@ def calculate_news_deduction(news):
     if high_risk_found:
         deduction += 25
         reasons.append("High-risk news")
+
     elif medium_risk_found:
         deduction += 10
         reasons.append("News risk")
