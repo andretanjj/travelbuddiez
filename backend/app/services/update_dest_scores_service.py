@@ -1,10 +1,3 @@
-<<<<<<< HEAD
-# this updates the destination_scores table in the database
-
-from app.database import get_connection
-from app.services.update_destination_service import build_updated_destinations
-from app.services.map_advisory_service import fetch_us_travel_advisories
-=======
 # this updates the destination_scores and news_articles tables in the database
 
 from app.database import get_connection
@@ -23,7 +16,6 @@ def format_embedding_for_pgvector(embedding):
 
     return "[" + ",".join(str(value) for value in embedding) + "]"
 
->>>>>>> dde13915c813df614bc5bd43727fbd6c61f5fb47
 
 def update_all_destinations():
     # this route manually updates all destinations in database using live data
@@ -38,12 +30,8 @@ def update_all_destinations():
                 id,
                 country_code AS "countryCode",
                 country_name AS country,
-<<<<<<< HEAD
-                city
-=======
                 city,
                 news_code AS "newsCode"
->>>>>>> dde13915c813df614bc5bd43727fbd6c61f5fb47
             FROM destinations
             ORDER BY country_name;
         """)
@@ -57,17 +45,9 @@ def update_all_destinations():
         for destination in destinations:
             updated_data = build_updated_destinations(destination, advisory_map)
 
-<<<<<<< HEAD
-            updated_score = upsert_destination_score(
-                cur,
-                destination["id"],
-                updated_data,
-            )
-=======
             updated_score = upsert_destination_score(cur, destination["id"], updated_data)
 
             upsert_news_articles(cur, destination["id"], updated_data["newsArticles"])
->>>>>>> dde13915c813df614bc5bd43727fbd6c61f5fb47
 
             updated_count += 1
 
@@ -106,12 +86,8 @@ def update_one_destination(country_code: str):
                 id,
                 country_code AS "countryCode",
                 country_name AS country,
-<<<<<<< HEAD
-                city
-=======
                 city,
                 news_code AS "newsCode"
->>>>>>> dde13915c813df614bc5bd43727fbd6c61f5fb47
             FROM destinations
             WHERE country_code = %s;
         """, (country_code,))
@@ -124,17 +100,9 @@ def update_one_destination(country_code: str):
         advisory_map = fetch_us_travel_advisories()
         updated_data = build_updated_destinations(destination, advisory_map)
 
-<<<<<<< HEAD
-        updated_score = upsert_destination_score(
-            cur,
-            destination["id"],
-            updated_data,
-        )
-=======
         updated_score = upsert_destination_score(cur, destination["id"], updated_data)
 
         upsert_news_articles(cur, destination["id"], updated_data["newsArticles"])
->>>>>>> dde13915c813df614bc5bd43727fbd6c61f5fb47
 
         conn.commit()
         return updated_score
@@ -177,11 +145,7 @@ def upsert_destination_score(cur, destination_id, updated_data: dict):
             updated_data["riskLevel"],
             updated_data["condition"],
             updated_data["weather"],
-<<<<<<< HEAD
-            updated_data["news"],
-=======
             updated_data["newsSummary"],
->>>>>>> dde13915c813df614bc5bd43727fbd6c61f5fb47
             updated_data["advisory"],
             destination_id,
         ))
@@ -205,13 +169,6 @@ def upsert_destination_score(cur, destination_id, updated_data: dict):
             updated_data["riskLevel"],
             updated_data["condition"],
             updated_data["weather"],
-<<<<<<< HEAD
-            updated_data["news"],
-            updated_data["advisory"],
-        ))
-
-    return cur.fetchone()
-=======
             updated_data["newsSummary"],
             updated_data["advisory"],
         ))
@@ -276,4 +233,3 @@ def upsert_news_articles(cur, destination_id, news_articles):
             article.get("abstractedSummary"),
             embedding,
         ))
->>>>>>> dde13915c813df614bc5bd43727fbd6c61f5fb47

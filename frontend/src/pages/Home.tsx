@@ -4,7 +4,6 @@ import { useNavigate } from "react-router-dom";
 import { IoIosAirplane } from "react-icons/io";
 import { FiGlobe, FiMapPin } from "react-icons/fi";
 
-/* Star background from the uploaded landing page */
 function StarField() {
     const stars = useRef<{ x: number; y: number; r: number; o: number }[]>([]);
 
@@ -38,7 +37,6 @@ function StarField() {
     );
 }
 
-/* Globe from the uploaded landing page */
 function GlobeHero() {
     return (
         <div className="relative flex h-[330px] w-[330px] select-none items-center justify-center md:h-[480px] md:w-[480px]">
