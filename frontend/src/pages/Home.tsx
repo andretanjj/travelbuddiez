@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useScroll, useTransform } from "motion/react";
 import { useNavigate } from "react-router-dom";
 import { IoIosAirplane } from "react-icons/io";
-import { FiGlobe, FiMapPin, FiInfo, FiNavigation } from "react-icons/fi";
+import { FiGlobe, FiMapPin } from "react-icons/fi";
 
 /* Star background from the uploaded landing page */
 function StarField() {
@@ -473,7 +473,7 @@ function Home() {
 
                         <motion.div
                             initial={{
-                                x: "-40vw",
+                                x: "-45vw",
                                 y: "15vh",
                                 opacity: 0,
                                 rotate: -15,
@@ -483,13 +483,13 @@ function Home() {
                                 x: "50vw",
                                 y: "-15vh",
                                 opacity: [0, 1, 1, 0],
-                                scale: [0.7, 1.3, 1.8, 2.3, 2.8],
+                                scale: [0.7, 1.3, 1.8, 2.8],
                             }}
                             transition={{
                                 duration: 2,
                                 delay: 0.5,
                                 ease: "easeInOut",
-                                times: [0, 0.25, 0.5, 0.75, 1],
+                                times: [0, 0.3, 0.5, 1],
                             }}
                             className="absolute text-5xl text-white drop-shadow-[0_0_18px_rgba(255,255,255,0.55)] md:text-7xl"
                         >
