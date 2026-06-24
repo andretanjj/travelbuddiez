@@ -4,6 +4,7 @@ import ExploreMapPage from "./pages/ExploreMapPage.tsx";
 import DestinationDashboardPage from "./pages/DestinationDashboardPage.tsx";
 import ComingSoon from "./pages/ComingSoon.tsx";
 import Navbar from "./components/Navbar.tsx";
+import TravelPlanningPage from "./pages/TravelPlanningPage";
 
 
 function App() {
@@ -13,7 +14,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/map" element={<ExploreMapPage />} />
-        <Route path="/planning" element={<ComingSoon />} />
+        <Route path="/planning" element={<TravelPlanningPage />} />
         <Route path="/about" element={<ComingSoon />} />
         <Route
           path="/destinations/:countryCode"

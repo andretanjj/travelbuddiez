@@ -13,23 +13,36 @@ def load_geojson_countries():
 
 
 def load_capital_overrides():
-    response = requests.get(REST_COUNTRIES_URL)
-    response.raise_for_status()
+    try:
+        response = requests.get(REST_COUNTRIES_URL, timeout=10)
+        response.raise_for_status()
 
-    countries = response.json()
-    city_overrides = {}
+        countries = response.json()
 
-    for country in countries:
-        country_code = country.get("cca3")
-        capitals = country.get("capital", [])
+        if not isinstance(countries, list):
+            print("Unexpected Rest Countries response:", countries)
+            return {}
 
-        if not country_code:
-            continue
+        city_overrides = {}
 
-        if capitals:
-            city_overrides[country_code] = capitals[0]
+        for country in countries:
+            if not isinstance(country, dict):
+                continue
 
-    return city_overrides
+            country_code = country.get("cca3")
+            capitals = country.get("capital", [])
+
+            if not country_code:
+                continue
+
+            if capitals:
+                city_overrides[country_code] = capitals[0]
+
+        return city_overrides
+
+    except Exception as error:
+        print("Failed to load capital overrides:", error)
+        return {}
 
 
 CITY_OVERRIDES = load_capital_overrides()
