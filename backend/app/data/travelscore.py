@@ -173,11 +173,11 @@ def calculate_news_deduction(news):
     # These are already filtered and summarized by nlp_service.py.
     for article in news_articles[:5]:
         title = article.get("title", "")
-        description = article.get("description", "")
+        original_description = article.get("originalDescription", "")
         abstracted_summary = article.get("abstractedSummary", "")
         content = article.get("content", "")
 
-        news_text = f"{title} {description} {abstracted_summary} {content}".lower()
+        news_text = f"{title} {original_description} {abstracted_summary} {content}".lower()
 
         # Positive/recovery news should not reduce the score.
         if any(keyword in news_text for keyword in recovery_keywords):
@@ -207,40 +207,66 @@ def calculate_advisory_deduction(advisory):
     deduction = 0
     reasons = []
 
-    advisory_text = str(advisory).lower()
+    advisory_level = None
+    advisory_text = ""
 
-    high_risk_advisory_keywords = [
-        "avoid travel",
-        "do not travel",
-        "natural disaster",
-        "disaster warning",
-        "affected regions",
-        "terrorism",
-        "civil unrest",
-    ]
+    if isinstance(advisory, dict):
+        advisory_level = advisory.get("advisoryLevel")
+        advisory_text = (
+            str(advisory.get("condition", ""))
+            + " "
+            + str(advisory.get("advisory", ""))
+        ).lower()
+    else:
+        advisory_text = str(advisory).lower()
 
-    medium_risk_advisory_keywords = [
-        "exercise caution",
-        "monitor",
-        "check",
-        "warning",
-        "regional travel notices",
-        "travel notices",
-    ]
-
-    if any(keyword in advisory_text for keyword in high_risk_advisory_keywords):
+    if advisory_level == 4:
         deduction += 35
         reasons.append("High travel advisory risk")
 
-    elif any(keyword in advisory_text for keyword in medium_risk_advisory_keywords):
+    elif advisory_level == 3:
+        deduction += 25
+        reasons.append("High travel advisory risk")
+
+    elif advisory_level == 2:
         deduction += 15
         reasons.append("Travel advisory caution")
+
+    elif advisory_level == 1:
+        deduction += 0
+
+    else:
+        high_risk_advisory_keywords = [
+            "avoid travel",
+            "do not travel",
+            "natural disaster",
+            "disaster warning",
+            "affected regions",
+            "terrorism",
+            "civil unrest",
+        ]
+
+        medium_risk_advisory_keywords = [
+            "exercise caution",
+            "monitor",
+            "check",
+            "warning",
+            "regional travel notices",
+            "travel notices",
+        ]
+
+        if any(keyword in advisory_text for keyword in high_risk_advisory_keywords):
+            deduction += 35
+            reasons.append("High travel advisory risk")
+
+        elif any(keyword in advisory_text for keyword in medium_risk_advisory_keywords):
+            deduction += 15
+            reasons.append("Travel advisory caution")
 
     return {
         "deduction": deduction,
         "reasons": reasons,
     }
-
 
 def get_risk_level(score):
     if score >= 75:

@@ -42,6 +42,7 @@ def get_default_map_data():
         "mapScore": None,
         "riskLevel": "Unknown",
         "condition": "No advisory data available",
+        "advisoryLevel": None,
         "advisory": "No advisory information is available for this destination yet.",
     }
 
@@ -127,8 +128,8 @@ def fetch_us_travel_advisories():
     ISO code is "jp", but the advisory feed category is "ja".
 
     Important:
-    This function should be called when backend starts, not when MapView loads.
-    The /destinations route should only read from the already-fetched advisory map.
+    GET /destinations reads cached DB data.
+    PUT /destinations/map-scores/update-all refreshes advisory data manually.
     """
 
     response = requests.get(TRAVEL_ADVISORIES_URL, timeout=10)
@@ -165,7 +166,8 @@ def fetch_us_travel_advisories():
             "mapScore": map_data["mapScore"],
             "riskLevel": map_data["riskLevel"],
             "condition": map_data["condition"],
-            "advisory": summary or title or "No advisory summary available.",
+            "advisoryLevel": advisory_level,
+            "advisory": title or "No advisory summary available.",
         }
 
         # Store by advisory code, e.g. "sg", "id", "ja".
@@ -223,6 +225,8 @@ def get_map_data_for_destination(destination, advisory_map):
         "mapScore": advisory_data["mapScore"],
         "riskLevel": advisory_data["riskLevel"],
         "condition": advisory_data["condition"],
+        "advisoryLevel": advisory_data["advisoryLevel"],
+        "advisory": advisory_data["advisory"],
     }
 
 

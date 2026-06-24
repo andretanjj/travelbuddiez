@@ -1,6 +1,5 @@
-fastapi==0.136.3
-uvicorn[standard]==0.48.0
-requests==2.34.2
-python-dotenv==1.2.2
-SQLAlchemy==2.0.50
-psycopg2-binary==2.9.12
+fastapi
+uvicorn
+python-dotenv
+requests
+psycopg2-binary

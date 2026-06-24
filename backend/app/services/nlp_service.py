@@ -24,7 +24,9 @@ Flow
 5. Cosine similarity
     - compare abstractedSummary embedding against ARTICLES_RELEVANCE_QUERY
 
-6. Return top 10
+6. Return top 10 processed articles
+    - includes abstractedSummary, similarityScore, and embedding
+    - embedding is for db storage, not frontend display
 """
 
 GEMINI_FLASH_MODEL = "gemini-3.1-flash-lite"
@@ -140,7 +142,7 @@ def article_to_text(article):
     """
 
     title = article.get("title", "") or ""
-    description = article.get("description", "") or ""
+    description = article.get("originalDescription", "") or ""
 
     return f"{title}. {description}".strip()
 
@@ -260,7 +262,7 @@ def abstract_articles_with_gemini(candidates, country_code):
 
     for index, article in enumerate(candidates):
         title = article.get("title", "") or ""
-        description = article.get("description", "") or ""
+        description = article.get("originalDescription", "") or ""
 
         article_blocks.append(
             f"""
@@ -403,12 +405,8 @@ Articles:
         article["isRelevant"] = True
         article["abstractedSummary"] = abstracted_summary.strip()
 
-        # Preserve the original API description for future database storage.
-        article["originalDescription"] = article.get("description", "") or ""
-
-        # Practical frontend choice:
-        # If your dashboard displays article.description, this makes it show the AI summary.
-        article["description"] = article["abstractedSummary"]
+        # Preserve originalDescription from news_service.py
+        article["originalDescription"] = article.get("originalDescription", "") or ""
 
         abstracted_articles.append(article)
 
@@ -628,8 +626,12 @@ def rank_news_articles(articles, country_code=None, top_k=10):
         ranked_article["similarityScore"] = round(float(similarity_score), 4)
         ranked_article["rankingMethod"] = "flash_abstraction_gemini_embedding_cosine"
 
-        # Do NOT return the full embedding to frontend.
-        # Later store embedding in Supabase PostgresSQL using pgvector.
+        # Keep embedding here so update_destination_service.py can store it in PostgreSQL.
+        # Dont send this directly to the frontend later
+        ranked_article["embedding"] = article_embedding
+
+        # This embedding is for database storage only
+        # Do not return it directly to frontened
         ranked_articles.append(ranked_article)
 
     ranked_articles.sort(

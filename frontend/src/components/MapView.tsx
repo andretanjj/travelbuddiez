@@ -11,11 +11,11 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import { getAllDestinations } from "../services/destinationApi";
 
 import CountryTooltip from "./CountryTooltip.tsx";
-import type { Destination } from "../types/country";
+import type { MapDestination } from "../types/country";
 
 // stores data needed to display the tooltip (same as CountryTooltip)
 interface TooltipState {
-    destination: Destination;
+    destination: MapDestination;
     x: number;
     y: number;
 }
@@ -28,9 +28,9 @@ interface TooltipState {
 } */
 
 // NEW VERSION: finds matching backend data country
-function findDestinationByCountryCode(countryCode: string, destinations: Destination[]): Destination | undefined {
+function findDestinationByCountryCode(countryCode: string, destinations: MapDestination[]): MapDestination | undefined {
     return destinations.find(
-        (destination: Destination) => destination.countryCode === countryCode
+        (destination: MapDestination) => destination.countryCode === countryCode
     );
 }
 
@@ -40,6 +40,20 @@ function getColor(score: number): string {
     else if (score >= 50) return "#ffff00";
     return "#f32e2e";
 }
+
+
+// this is for countryCodes with "-99"
+function makeCountryCode(countryCode: string, countryName: string): string {
+    if (countryCode !== "-99") {
+        return countryCode;
+    }
+
+    return countryName
+        .toUpperCase()
+        .replace(/[^A-Z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, "");
+}
+
 
 function MapView() {
   // mapbox map object
@@ -55,7 +69,7 @@ function MapView() {
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
 
   // using advisory-based map data from backend
-  const [destinations, setDestinations] = useState<Destination[]>([]);
+  const [destinations, setDestinations] = useState<MapDestination[]>([]);
 
   // allows this component to move to another page (DestinationDashboardPage)
   const navigate = useNavigate();
@@ -196,22 +210,25 @@ function MapView() {
                 if (feature === undefined) return;
 
                 // read country code from hovered GeoJSON feature
-                const countryCode = feature.properties?.["ISO3166-1-Alpha-3"];
+                const rawCountryCode = feature.properties?.["ISO3166-1-Alpha-3"];
+                const countryName = feature.properties?.["name"];
 
-                // ensure country code is a string before using
-                if (typeof countryCode !== "string") return;
+                if (typeof rawCountryCode !== "string") return;
+                if (typeof countryName !== "string") return;
+
+                const countryCode = makeCountryCode(rawCountryCode, countryName);
                 
                 // if another country was previously hovered, remove its hover state first
                 clearHoveredCountry();
 
-                hoveredCountryIdRef.current = countryCode; // store currently hovered country code
+                hoveredCountryIdRef.current = rawCountryCode; // store currently hovered country code
 
                 // apply hover state to the current country
                 // activates fill and line-width changes
                 mapRef.current.setFeatureState(
                 {
                     source: "countries",
-                    id: countryCode, // promoteId reads "ISO..."" as the feature ID
+                    id: rawCountryCode, // promoteId reads "ISO..."" as the feature ID
                 },
                 {
                     hover: true,
@@ -264,9 +281,13 @@ function MapView() {
 
             if (feature === undefined) return;
 
-            const countryCode = feature.properties?.["ISO3166-1-Alpha-3"];
+            const rawCountryCode = feature.properties?.["ISO3166-1-Alpha-3"];
+            const countryName = feature.properties?.["name"];
 
-            if (typeof countryCode !== "string") return;
+            if (typeof rawCountryCode !== "string") return;
+            if (typeof countryName !== "string") return;
+
+            const countryCode = makeCountryCode(rawCountryCode, countryName);
 
             // NEW VERSION
             const destination = findDestinationByCountryCode(countryCode, destinations);

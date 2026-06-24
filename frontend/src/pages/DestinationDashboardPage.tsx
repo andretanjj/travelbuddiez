@@ -12,7 +12,8 @@ import type { Destination } from "../types/country";
 function getRiskBadgeClass(riskLevel: Destination["riskLevel"]): string {
   if (riskLevel === "Low") return "bg-green-100 text-green-700";
   else if (riskLevel === "Medium") return "bg-yellow-100 text-yellow-700";
-  return "bg-red-100 text-red-700";
+  else if (riskLevel === "High") return "bg-red-100 text-red-700";
+  return "bg-gray-100 text-gray-700";
 }
 
 function DestinationDashboardPage() {
@@ -116,7 +117,7 @@ function DestinationDashboardPage() {
                 destination.riskLevel
               )}`}
             >
-              {destination.riskLevel} Risk
+              {destination.riskLevel ?? "Unknown"} Risk
             </span>
           </div>
 
@@ -124,21 +125,21 @@ function DestinationDashboardPage() {
             <div className="rounded-xl border border-gray-200 p-4">
               <p className="text-sm text-gray-500">Travel Score</p>
               <p className="mt-2 text-3xl font-bold text-gray-900">
-                {destination.travelScore}/100
+                {destination.travelScore !== null ? `${destination.travelScore}/100` : "N/A"}
               </p>
             </div>
 
             <div className="rounded-xl border border-gray-200 p-4">
               <p className="text-sm text-gray-500">Risk Level</p>
               <p className="mt-2 text-xl font-semibold text-gray-900">
-                {destination.riskLevel}
+                {destination.riskLevel ?? "Unknown"}
               </p>
             </div>
 
             <div className="rounded-xl border border-gray-200 p-4">
               <p className="text-sm text-gray-500">Condition</p>
               <p className="mt-2 text-xl font-semibold text-gray-900">
-                {destination.condition}
+                {destination.condition ?? "No major safety risk available."}
               </p>
             </div>
           </div>
@@ -153,6 +154,18 @@ function DestinationDashboardPage() {
                 {typeof destination.weather === "string"
                   ? destination.weather
                   : "Weather information unavailable."}
+              </p>
+            </div>
+
+            <div className="mt-6 rounded-xl border border-gray-200 p-4">
+              <h2 className="mb-2 text-lg font-semibold text-gray-900">
+                Travel Advisory
+              </h2>
+
+              <p className="text-gray-700">
+                {typeof destination.advisory === "string" && destination.advisory.length > 0
+                  ? destination.advisory
+                  : "No advisory information available."}
               </p>
             </div>
 

@@ -13,15 +13,25 @@ def normalize_article(article):
     """
     Converts World News API article format into a cleaner format
     for the frontend dashboard.
+
+    This returns fields for: 
+    - NLP processing
+    - Future database storage in news_articles table
     """
+
+    original_description = article.get("summary") or article.get("text", "")
+
+    source_name = (
+        article.get("source_name")
+        or article.get("source")
+        or article.get("source_country", "")
+    )
 
     return {
         "title": article.get("title", "No title available"),
-        "description": article.get("summary") or article.get("text", ""),
+        "originalDescription": original_description,
         "url": article.get("url"),
-        "source": {
-            "name": article.get("source_country", "").upper()
-        },
+        "sourceName": str(source_name).upper() if source_name else "",
         "publishedAt": article.get("publish_date"),
     }
 
@@ -31,6 +41,7 @@ def get_news(news_code: str, country_name: str):
     """
     Fetches travel-risk-related news for a country.
     This function only fetches and normalizes articles.
+    Does NOT run NLP and does NOT write to the database.
     """
 
     api_key = os.getenv("WORLD_NEWS_API_KEY")
