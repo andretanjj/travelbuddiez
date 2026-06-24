@@ -12,7 +12,8 @@ import type { Destination } from "../types/country";
 function getRiskBadgeClass(riskLevel: Destination["riskLevel"]): string {
   if (riskLevel === "Low") return "bg-green-100 text-green-700";
   else if (riskLevel === "Medium") return "bg-yellow-100 text-yellow-700";
-  return "bg-red-100 text-red-700";
+  else if (riskLevel === "High") return "bg-red-100 text-red-700";
+  return "bg-gray-100 text-gray-700";
 }
 
 function DestinationDashboardPage() {
@@ -116,7 +117,7 @@ function DestinationDashboardPage() {
                 destination.riskLevel
               )}`}
             >
-              {destination.riskLevel} Risk
+              {destination.riskLevel ?? "Unknown"} Risk
             </span>
           </div>
 
@@ -124,21 +125,21 @@ function DestinationDashboardPage() {
             <div className="rounded-xl border border-gray-200 p-4">
               <p className="text-sm text-gray-500">Travel Score</p>
               <p className="mt-2 text-3xl font-bold text-gray-900">
-                {destination.travelScore}/100
+                {destination.travelScore !== null ? `${destination.travelScore}/100` : "N/A"}
               </p>
             </div>
 
             <div className="rounded-xl border border-gray-200 p-4">
               <p className="text-sm text-gray-500">Risk Level</p>
               <p className="mt-2 text-xl font-semibold text-gray-900">
-                {destination.riskLevel}
+                {destination.riskLevel ?? "Unknown"}
               </p>
             </div>
 
             <div className="rounded-xl border border-gray-200 p-4">
               <p className="text-sm text-gray-500">Condition</p>
               <p className="mt-2 text-xl font-semibold text-gray-900">
-                {destination.condition}
+                {destination.condition ?? "No major safety risk available."}
               </p>
             </div>
           </div>
@@ -156,53 +157,32 @@ function DestinationDashboardPage() {
               </p>
             </div>
 
+            <div className="mt-6 rounded-xl border border-gray-200 p-4">
+              <h2 className="mb-2 text-lg font-semibold text-gray-900">
+                Travel Advisory
+              </h2>
+
+              <p className="text-gray-700">
+                {typeof destination.advisory === "string" && destination.advisory.length > 0
+                  ? destination.advisory
+                  : "No advisory information available."}
+              </p>
+            </div>
+
             <div className="rounded-xl border border-gray-200 p-4">
               <h2 className="mb-3 text-lg font-semibold text-gray-900">
                 Latest Travel-Related News
               </h2>
 
-              <div className="max-h-72 space-y-3 overflow-y-auto pr-2">
-                {destination.news && destination.news.length > 0 ? (
-                  destination.news.map((article, index) => (
-                    <div
-                      key={index}
-                      className="rounded-xl bg-slate-50 p-3 text-gray-900"
-                    >
-                      {article.url ? (
-                        <a
-                          href={article.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="font-medium text-blue-700 hover:underline"
-                        >
-                          {article.title}
-                        </a>
-                      ) : (
-                        <p className="font-medium text-gray-900">{article.title}</p>
-                      )}
-
-                      {article.description && (
-                        <p className="mt-1 text-sm text-gray-600">
-                          {article.description}
-                        </p>
-                      )}
-
-                      {article.source?.name && (
-                        <p className="mt-2 text-xs text-gray-500">
-                          Source: {article.source.name}
-                        </p>
-                      )}
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-sm text-gray-600">
-                    No major travel-related news found.
-                  </p>
-                )}
-              </div>
+              <p className="text-gray-700">
+                {typeof destination.news === "string" && destination.news.length > 0
+                  ? destination.news
+                  : "No major travel-related news found."}
+              </p>
             </div>
-
           </div>
+
+
 
           <div className="mt-6 rounded-xl border border-dashed border-gray-300 p-4">
             <h2 className="mb-2 text-lg font-semibold text-gray-900">
@@ -215,8 +195,8 @@ function DestinationDashboardPage() {
             </p>
           </div>
         </section>
-      </div>
-    </main>
+      </div >
+    </main >
   );
 }
 

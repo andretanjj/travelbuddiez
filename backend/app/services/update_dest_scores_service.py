@@ -1,8 +1,29 @@
+<<<<<<< HEAD
 # this updates the destination_scores table in the database
 
 from app.database import get_connection
 from app.services.update_destination_service import build_updated_destinations
 from app.services.map_advisory_service import fetch_us_travel_advisories
+=======
+# this updates the destination_scores and news_articles tables in the database
+
+from app.database import get_connection
+from app.services.update_destination_service import build_updated_destinations
+from app.services.advisory_service import fetch_us_travel_advisories
+
+def format_embedding_for_pgvector(embedding):
+    """
+    Converts Python list embedding into pgvector string format.
+    Eg:
+    [0.1, 0.2, 0.3] -> "[0.1,0.2,0.3]"
+    """
+
+    if embedding is None:
+        return None
+
+    return "[" + ",".join(str(value) for value in embedding) + "]"
+
+>>>>>>> dde13915c813df614bc5bd43727fbd6c61f5fb47
 
 def update_all_destinations():
     # this route manually updates all destinations in database using live data
@@ -17,7 +38,12 @@ def update_all_destinations():
                 id,
                 country_code AS "countryCode",
                 country_name AS country,
+<<<<<<< HEAD
                 city
+=======
+                city,
+                news_code AS "newsCode"
+>>>>>>> dde13915c813df614bc5bd43727fbd6c61f5fb47
             FROM destinations
             ORDER BY country_name;
         """)
@@ -31,11 +57,17 @@ def update_all_destinations():
         for destination in destinations:
             updated_data = build_updated_destinations(destination, advisory_map)
 
+<<<<<<< HEAD
             updated_score = upsert_destination_score(
                 cur,
                 destination["id"],
                 updated_data,
             )
+=======
+            updated_score = upsert_destination_score(cur, destination["id"], updated_data)
+
+            upsert_news_articles(cur, destination["id"], updated_data["newsArticles"])
+>>>>>>> dde13915c813df614bc5bd43727fbd6c61f5fb47
 
             updated_count += 1
 
@@ -74,7 +106,12 @@ def update_one_destination(country_code: str):
                 id,
                 country_code AS "countryCode",
                 country_name AS country,
+<<<<<<< HEAD
                 city
+=======
+                city,
+                news_code AS "newsCode"
+>>>>>>> dde13915c813df614bc5bd43727fbd6c61f5fb47
             FROM destinations
             WHERE country_code = %s;
         """, (country_code,))
@@ -87,11 +124,17 @@ def update_one_destination(country_code: str):
         advisory_map = fetch_us_travel_advisories()
         updated_data = build_updated_destinations(destination, advisory_map)
 
+<<<<<<< HEAD
         updated_score = upsert_destination_score(
             cur,
             destination["id"],
             updated_data,
         )
+=======
+        updated_score = upsert_destination_score(cur, destination["id"], updated_data)
+
+        upsert_news_articles(cur, destination["id"], updated_data["newsArticles"])
+>>>>>>> dde13915c813df614bc5bd43727fbd6c61f5fb47
 
         conn.commit()
         return updated_score
@@ -134,7 +177,11 @@ def upsert_destination_score(cur, destination_id, updated_data: dict):
             updated_data["riskLevel"],
             updated_data["condition"],
             updated_data["weather"],
+<<<<<<< HEAD
             updated_data["news"],
+=======
+            updated_data["newsSummary"],
+>>>>>>> dde13915c813df614bc5bd43727fbd6c61f5fb47
             updated_data["advisory"],
             destination_id,
         ))
@@ -158,8 +205,75 @@ def upsert_destination_score(cur, destination_id, updated_data: dict):
             updated_data["riskLevel"],
             updated_data["condition"],
             updated_data["weather"],
+<<<<<<< HEAD
             updated_data["news"],
             updated_data["advisory"],
         ))
 
     return cur.fetchone()
+=======
+            updated_data["newsSummary"],
+            updated_data["advisory"],
+        ))
+
+    return cur.fetchone()
+
+
+def upsert_news_articles(cur, destination_id, news_articles):
+    """
+    Stores ranked NLP articles into news_articles table.
+    For now, this stores:
+        - original article info
+        - Gemini relevance results
+        - abstracted news summary
+        - gemini embedding
+    """
+
+    if not news_articles:
+        return
+    
+    for article in news_articles:
+        url = article.get("url")
+
+        if not url:
+            continue
+
+        embedding = format_embedding_for_pgvector(article.get("embedding"))
+
+        cur.execute("""
+            INSERT INTO news_articles (
+                destination_id,
+                title,
+                original_description,
+                url,
+                source_name,
+                published_at,
+                is_relevant,
+                abstracted_summary,
+                embedding,
+                fetched_at,
+                processed_at
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+            ON CONFLICT (destination_id, url)
+            DO UPDATE SET
+                title = EXCLUDED.title,
+                original_description = EXCLUDED.original_description,
+                source_name = EXCLUDED.source_name,
+                published_at = EXCLUDED.published_at,
+                is_relevant = EXCLUDED.is_relevant,
+                abstracted_summary = EXCLUDED.abstracted_summary,
+                embedding = EXCLUDED.embedding,
+                processed_at = NOW();
+        """, (
+            destination_id,
+            article.get("title", "No title available"),
+            article.get("originalDescription"),
+            url,
+            article.get("sourceName"),
+            article.get("publishedAt"),
+            article.get("isRelevant", True),
+            article.get("abstractedSummary"),
+            embedding,
+        ))
+>>>>>>> dde13915c813df614bc5bd43727fbd6c61f5fb47
