@@ -3,23 +3,24 @@ import { FiAlertTriangle, FiMapPin, FiX } from "react-icons/fi";
 import type { MapDestination } from "../types/country.ts";
 
 interface CountryTooltipProps {
-    // destination obj contains all travel-related info to display
-    destination:  MapDestination;
-    
-    // mouse pos inside map container
-    x: number;
-    y: number;
+  destination: MapDestination;
+  x: number;
+  y: number;
 }
 
-// returns different Tailwind classes depending on riskLevel
 function getRiskBadgeClass(riskLevel: MapDestination["riskLevel"]): string {
-    if (riskLevel === "Low") return "bg-green-100 text-green-700";
-    else if (riskLevel === "Medium") return "bg-yellow-100 text-yellow-700";
-    else if (riskLevel === "High") return "bg-red-100 text-red-700";
-    return "bg-gray-100 text-gray-700";
+  if (riskLevel === "Low") {
+    return "border-green-300 bg-green-50 text-green-700";
+  }
+
+  if (riskLevel === "Medium") {
+    return "border-yellow-300 bg-yellow-50 text-yellow-700";
+  }
+
+  return "border-red-300 bg-red-50 text-red-700";
 }
 
-function getScoreBarClass(riskLevel: Destination["riskLevel"]): string {
+function getScoreBarClass(riskLevel: MapDestination["riskLevel"]): string {
   if (riskLevel === "Low") return "bg-green-500";
   if (riskLevel === "Medium") return "bg-yellow-500";
   return "bg-red-500";
@@ -54,12 +55,6 @@ function CountryTooltip({ destination, x, y }: CountryTooltipProps) {
               {destination.country}
             </h2>
 
-        <span
-          className={`rounded-full px-2 py-1 text-xs font-semibold ${getRiskBadgeClass(destination.riskLevel)}`}
-        >
-          {destination.riskLevel ?? "Unknown"} Risk
-        </span>
-      </div>
             <span
               className={`
                                 inline-flex items-center gap-1 rounded-full border px-2 py-0.5
@@ -72,18 +67,6 @@ function CountryTooltip({ destination, x, y }: CountryTooltipProps) {
             </span>
           </div>
 
-      <div className="space-y-1 text-sm text-gray-700">
-        <p className="text-sm text-gray-600">
-          Map Score:{" "}
-          {destination.mapScore !== null && destination.mapScore !== undefined
-            ? `${destination.mapScore}/100`
-            : "N/A"}
-        </p>
-
-        <p>
-          <span className="font-medium text-gray-900">Condition:</span>{" "}
-          {destination.condition ?? "No advisory data available"}
-        </p>
           <div className="mt-1 flex items-center gap-1 text-[11px] text-slate-400">
             <FiMapPin className="h-3 w-3" />
             <span className="truncate">
