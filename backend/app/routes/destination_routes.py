@@ -142,6 +142,7 @@ def get_destination(country_code: str):
     try: 
         cur.execute("""
             SELECT 
+                d.id,
                 d.country_code AS "countryCode", 
                 d.country_name AS country, 
                 d.city, 
@@ -156,11 +157,32 @@ def get_destination(country_code: str):
             LEFT JOIN destination_scores ds 
             ON d.id = ds.destination_id 
             WHERE d.country_code = %s; 
-        """, (country_code,)) 
+        """, (country_code.upper(),)) 
 
         destination = cur.fetchone() 
+
         if destination is None: 
             raise HTTPException(status_code=404, detail="Destination not found") 
+        
+        cur.execute("""
+            SELECT
+                title,
+                abstracted_summary AS "abstractedSummary",
+                url,
+                source_name AS "sourceName",
+                published_at AS "publishedAt",
+                is_relevant AS "isRelevant"
+            FROM news_articles
+            WHERE destination_id = %s
+            AND is_relevant = TRUE
+            ORDER BY rank_position ASC
+            LIMIT 10;
+        """, (destination["id"],))
+
+        news_articles = cur.fetchall()
+
+        destination["newsArticles"] = news_articles
+
         return destination
     
     finally:

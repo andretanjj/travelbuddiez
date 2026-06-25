@@ -189,7 +189,7 @@ def upsert_news_articles(cur, destination_id, news_articles):
     if not news_articles:
         return
     
-    for article in news_articles:
+    for index, article in enumerate(news_articles, start=1):
         url = article.get("url")
 
         if not url:
@@ -208,10 +208,11 @@ def upsert_news_articles(cur, destination_id, news_articles):
                 is_relevant,
                 abstracted_summary,
                 embedding,
+                rank_position,
                 fetched_at,
                 processed_at
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
             ON CONFLICT (destination_id, url)
             DO UPDATE SET
                 title = EXCLUDED.title,
@@ -221,6 +222,7 @@ def upsert_news_articles(cur, destination_id, news_articles):
                 is_relevant = EXCLUDED.is_relevant,
                 abstracted_summary = EXCLUDED.abstracted_summary,
                 embedding = EXCLUDED.embedding,
+                rank_position = EXCLUDED.rank_position,
                 processed_at = NOW();
         """, (
             destination_id,
@@ -232,4 +234,5 @@ def upsert_news_articles(cur, destination_id, news_articles):
             article.get("isRelevant", True),
             article.get("abstractedSummary"),
             embedding,
+            index,
         ))

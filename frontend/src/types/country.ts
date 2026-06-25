@@ -21,4 +21,15 @@ export interface Destination {
   news: string | null;
   advisory: string | null;
   lastUpdated?: string;
+  newsArticles?: NewsArticle[];
+}
+
+export interface NewsArticle {
+    title: string;
+    abstractedSummary: string | null;
+    url: string;
+    sourceName: string | null;
+    publishedAt: string | null;
+    isRelevant?: boolean;
+    rankPosition?: number;
 }
