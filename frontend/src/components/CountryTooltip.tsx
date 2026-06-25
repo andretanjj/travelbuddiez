@@ -26,6 +26,28 @@ function getScoreBarClass(riskLevel: MapDestination["riskLevel"]): string {
   return "bg-red-500";
 }
 
+function formatLastUpdated(lastUpdated: string | null | undefined): string {
+  if (!lastUpdated) {
+    return "Last updated: Not available";
+  }
+
+  const date = new Date(lastUpdated);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Last updated: Not available";
+  }
+
+  return `Last updated: ${date.toLocaleString("en-SG", {
+    timeZone: "Asia/Singapore",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  })}`;
+}
+
 function CountryTooltip({ destination, x, y }: CountryTooltipProps) {
   const score =
     destination.mapScore !== null && destination.mapScore !== undefined
@@ -118,7 +140,7 @@ function CountryTooltip({ destination, x, y }: CountryTooltipProps) {
       </p>
 
       <p className="mt-3 text-[11px] text-slate-400">
-        Updated recently
+        {formatLastUpdated(destination.lastUpdated)}
       </p>
     </motion.div>
   );
