@@ -16,14 +16,19 @@ def get_weather(city: str) -> str:
         "units": "metric",
     }
 
-    response = requests.get(url, params=params, timeout=10)
+    try:
+        response = requests.get(url, params=params, timeout=10)
 
-    if response.status_code != 200:
+        if response.status_code != 200:
+            return "Weather information is currently unavailable."
+
+        data = response.json()
+
+        description = data["weather"][0]["description"]
+        temperature = data["main"]["temp"]
+
+        return f"{description.capitalize()}, around {temperature}°C."
+
+    except requests.exceptions.RequestException as error:
+        print("OpenWeather network error:", error)
         return "Weather information is currently unavailable."
-
-    data = response.json()
-
-    description = data["weather"][0]["description"]
-    temperature = data["main"]["temp"]
-
-    return f"{description.capitalize()}, around {temperature}°C."

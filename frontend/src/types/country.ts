@@ -1,37 +1,35 @@
-// this is the data shape
-export type TravelCondition =
-    | "Safe"
-    | "Weather Risk"
-    | "Natural Disaster Risk"
-    | "Political Risk"
-    | "Social Unrest"
-    | "Unknown"
+export type RiskLevel = "Low" | "Medium" | "High" | "Unknown";
 
-export interface NewsArticle {
-  title: string;
-  description?: string;
-  url?: string;
-  source?: {
-    name?: string;
-  };
-  publishedAt?: string;
+export interface MapDestination {
+  countryCode: string;
+  country: string;
+  city: string;
+  mapScore: number | null;
+  riskLevel: RiskLevel | null;
+  condition: string | null;
+  lastUpdated?: string;
 }
 
 export interface Destination {
   countryCode: string;
   country: string;
   city: string;
+  travelScore: number | null;
+  riskLevel: RiskLevel | null;
+  condition: string | null;
+  weather: string | null;
+  news: string | null;
+  advisory: string | null;
+  lastUpdated?: string;
+  newsArticles?: NewsArticle[];
+}
 
-  // Used by MapView and CountryTooltip.
-  mapScore?: number | null;
-
-  // Used by DestinationDashboardPage.
-  travelScore?: number;
-
-  riskLevel: "Low" | "Medium" | "High" | "Unknown";
-  condition: string;
-
-  weather?: unknown;
-  news?: NewsArticle[];
-  advisory?: unknown;
+export interface NewsArticle {
+    title: string;
+    abstractedSummary: string | null;
+    url: string;
+    sourceName: string | null;
+    publishedAt: string | null;
+    isRelevant?: boolean;
+    rankPosition?: number;
 }

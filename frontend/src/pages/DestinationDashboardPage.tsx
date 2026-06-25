@@ -12,7 +12,8 @@ import type { Destination } from "../types/country";
 function getRiskBadgeClass(riskLevel: Destination["riskLevel"]): string {
   if (riskLevel === "Low") return "bg-green-100 text-green-700";
   else if (riskLevel === "Medium") return "bg-yellow-100 text-yellow-700";
-  return "bg-red-100 text-red-700";
+  else if (riskLevel === "High") return "bg-red-100 text-red-700";
+  return "bg-gray-100 text-gray-700";
 }
 
 function DestinationDashboardPage() {
@@ -78,9 +79,7 @@ function DestinationDashboardPage() {
             Destination not found
           </h1>
 
-          <p className="mb-6 text-gray-600">
-            {errorMessage}
-          </p>
+          <p className="mb-6 text-gray-600">{errorMessage}</p>
 
           <Link
             to="/map"
@@ -111,12 +110,13 @@ function DestinationDashboardPage() {
                 {destination.country}
               </h1>
             </div>
+
             <span
               className={`rounded-full px-3 py-1 text-sm font-semibold ${getRiskBadgeClass(
                 destination.riskLevel
               )}`}
             >
-              {destination.riskLevel} Risk
+              {destination.riskLevel ?? "Unknown"} Risk
             </span>
           </div>
 
@@ -124,21 +124,23 @@ function DestinationDashboardPage() {
             <div className="rounded-xl border border-gray-200 p-4">
               <p className="text-sm text-gray-500">Travel Score</p>
               <p className="mt-2 text-3xl font-bold text-gray-900">
-                {destination.travelScore}/100
+                {destination.travelScore !== null
+                  ? `${destination.travelScore}/100`
+                  : "N/A"}
               </p>
             </div>
 
             <div className="rounded-xl border border-gray-200 p-4">
               <p className="text-sm text-gray-500">Risk Level</p>
               <p className="mt-2 text-xl font-semibold text-gray-900">
-                {destination.riskLevel}
+                {destination.riskLevel ?? "Unknown"}
               </p>
             </div>
 
             <div className="rounded-xl border border-gray-200 p-4">
               <p className="text-sm text-gray-500">Condition</p>
               <p className="mt-2 text-xl font-semibold text-gray-900">
-                {destination.condition}
+                {destination.condition ?? "No major safety risk available."}
               </p>
             </div>
           </div>
@@ -157,51 +159,72 @@ function DestinationDashboardPage() {
             </div>
 
             <div className="rounded-xl border border-gray-200 p-4">
-              <h2 className="mb-3 text-lg font-semibold text-gray-900">
-                Latest Travel-Related News
+              <h2 className="mb-2 text-lg font-semibold text-gray-900">
+                Travel Advisory
               </h2>
 
-              <div className="max-h-72 space-y-3 overflow-y-auto pr-2">
-                {destination.news && destination.news.length > 0 ? (
-                  destination.news.map((article, index) => (
-                    <div
-                      key={index}
-                      className="rounded-xl bg-slate-50 p-3 text-gray-900"
-                    >
-                      {article.url ? (
-                        <a
-                          href={article.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="font-medium text-blue-700 hover:underline"
-                        >
-                          {article.title}
-                        </a>
-                      ) : (
-                        <p className="font-medium text-gray-900">{article.title}</p>
-                      )}
-
-                      {article.description && (
-                        <p className="mt-1 text-sm text-gray-600">
-                          {article.description}
-                        </p>
-                      )}
-
-                      {article.source?.name && (
-                        <p className="mt-2 text-xs text-gray-500">
-                          Source: {article.source.name}
-                        </p>
-                      )}
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-sm text-gray-600">
-                    No major travel-related news found.
-                  </p>
-                )}
-              </div>
+              <p className="text-gray-700">
+                {typeof destination.advisory === "string" &&
+                destination.advisory.length > 0
+                  ? destination.advisory
+                  : "No advisory information available."}
+              </p>
             </div>
+          </div>
 
+          <div className="mt-6 rounded-xl border border-gray-200 p-4">
+            <h2 className="mb-4 text-lg font-semibold text-gray-900">
+              AI Travel News Summary
+            </h2>
+
+            <p className="text-gray-700">
+              {typeof destination.news === "string" &&
+              destination.news.length > 0
+                ? destination.news
+                : "No major travel-related news found."}
+            </p>
+          </div>
+
+          <div className="mt-6 rounded-xl border border-gray-200 p-4">
+            <h2 className="mb-4 text-lg font-semibold text-gray-900">
+              Top Travel-Related News
+            </h2>
+
+            {destination.newsArticles && destination.newsArticles.length > 0 ? (
+              <div className="space-y-4">
+                {destination.newsArticles.map((article) => (
+                  <div
+                    key={article.url}
+                    className="border-b border-gray-200 pb-4 last:border-b-0"
+                  >
+                    <a
+                      href={article.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-semibold text-gray-900 hover:text-blue-600 hover:underline"
+                    >
+                      {article.rankPosition
+                        ? `${article.rankPosition}. ${article.title}`
+                        : article.title}
+                    </a>
+
+                    <p className="mt-2 text-gray-700">
+                      {article.abstractedSummary ?? "No summary available."}
+                    </p>
+
+                    {article.sourceName && (
+                      <p className="mt-2 text-sm text-gray-500">
+                        Source: {article.sourceName}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-gray-700">
+                No travel-related news articles available.
+              </p>
+            )}
           </div>
 
           <div className="mt-6 rounded-xl border border-dashed border-gray-300 p-4">

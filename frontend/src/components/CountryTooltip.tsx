@@ -1,21 +1,22 @@
 import { motion } from "motion/react";
-import type { Destination } from "../types/country.ts";
+import type { MapDestination } from "../types/country.ts";
 
 // properties to pass data from parent component to child component
 interface CountryTooltipProps {
     // destination obj contains all travel-related info to display
-    destination:  Destination;
+    destination:  MapDestination;
     
     // mouse pos inside map container
     x: number;
     y: number;
 }
 
-// returns different Tailwind classers depending on riskLevel
-function getRiskBadgeClass(riskLevel: Destination["riskLevel"]): string {
+// returns different Tailwind classes depending on riskLevel
+function getRiskBadgeClass(riskLevel: MapDestination["riskLevel"]): string {
     if (riskLevel === "Low") return "bg-green-100 text-green-700";
     else if (riskLevel === "Medium") return "bg-yellow-100 text-yellow-700";
-    return "bg-red-100 text-red-700";
+    else if (riskLevel === "High") return "bg-red-100 text-red-700";
+    return "bg-gray-100 text-gray-700";
 }
 
 function CountryTooltip({ destination, x, y}: CountryTooltipProps) {
@@ -40,7 +41,7 @@ function CountryTooltip({ destination, x, y}: CountryTooltipProps) {
         <span
           className={`rounded-full px-2 py-1 text-xs font-semibold ${getRiskBadgeClass(destination.riskLevel)}`}
         >
-          {destination.riskLevel} Risk
+          {destination.riskLevel ?? "Unknown"} Risk
         </span>
       </div>
 
@@ -54,7 +55,7 @@ function CountryTooltip({ destination, x, y}: CountryTooltipProps) {
 
         <p>
           <span className="font-medium text-gray-900">Condition:</span>{" "}
-          {destination.condition}
+          {destination.condition ?? "No advisory data available"}
         </p>
       </div>
     </motion.div>
