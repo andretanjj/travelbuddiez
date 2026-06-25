@@ -7,6 +7,7 @@ from app.services.update_dest_scores_service import (
     update_one_destination
 )
 from app.services.update_map_scores_service import update_map_scores
+from app.services.map_update_checker import check_last_updated_map_scores
 
 
 router = APIRouter(
@@ -58,6 +59,13 @@ def get_all_destinations():
     Does NOT call weather/news/Gemini APIs.
     returns data frm database
     """
+    try:
+        check_last_updated_map_scores(hours=12)
+        print("Successfully checked destination_map_scores")
+    except Exception as error:
+        print("Map score lazy refresh failed:", error)
+        # Let the map still load using old DB data if refresh fails
+
     conn = get_connection()
     cur = conn.cursor()
 
