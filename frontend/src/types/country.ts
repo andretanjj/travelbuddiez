@@ -7,7 +7,7 @@ export interface MapDestination {
   mapScore: number | null;
   riskLevel: RiskLevel | null;
   condition: string | null;
-  lastUpdated?: string;
+  lastUpdated?: string | null;
 }
 
 export interface Destination {

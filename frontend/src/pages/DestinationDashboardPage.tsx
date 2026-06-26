@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import {
+  AlertTriangle,
+  CloudRain,
+  Info,
+  Newspaper,
+  Shield,
+  Star,
+} from "lucide-react";
 
 // OLD VERSION: used frontend mock data before backend integration
 // import { mockDestinations } from "../data/mockDestinations";
@@ -30,6 +38,7 @@ function getRiskTextClass(riskLevel: Destination["riskLevel"]): string {
   return "text-slate-400";
 }
 
+
 // glass banner
 function GlassCard({
   children,
@@ -44,6 +53,53 @@ function GlassCard({
     </div>
   );
 }
+
+
+// Last Updated
+function formatLastUpdated(lastUpdated: string | null | undefined): string {
+  if (!lastUpdated) {
+    return "Last updated: Not available";
+  }
+
+  const date = new Date(lastUpdated);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Last updated: Not available";
+  }
+
+  return `Last updated: ${date.toLocaleString("en-SG", {
+    timeZone: "Asia/Singapore",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  })}`;
+}
+
+
+function CardIcon({
+  icon: Icon,
+  className,
+  align = "center",
+}: {
+  icon: React.ElementType;
+  className: string;
+  align?: "left" | "center";
+}) {
+  return (
+    <div
+      className={`mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 ${
+        align === "center" ? "mx-auto" : ""
+      } ${className}`}
+    >
+      <Icon size={22} strokeWidth={1.8} />
+    </div>
+  );
+}
+
+
 function DestinationDashboardPage() {
   // reads countryCode from URL, e.g. /destinations/SGP
   const { countryCode } = useParams();
@@ -172,6 +228,10 @@ function DestinationDashboardPage() {
         <h1 className="mb-5 text-center text-[clamp(100px,15vw,150px)] font-extralight leading-none tracking-[-0.04em] text-slate-100 [text-shadow:0_0_80px_rgba(100,160,255,0.25)]">
           {destination.country}
         </h1>
+
+        <p className="mb-5 text-center text-sm font-light tracking-wide text-slate-400/50">
+          {formatLastUpdated(destination.lastUpdated)}
+        </p>
         
         <div
           className={`mb-11 rounded-full border px-4 py-1 text-sm tracking-wide backdrop-blur ${getRiskStyles(
@@ -183,6 +243,8 @@ function DestinationDashboardPage() {
 
         <div className="grid w-full max-w-[820px] gap-3 md:grid-cols-4">
           <GlassCard className="p-6 text-center">
+            <CardIcon icon={Star} className="text-amber-300" />
+
             <p className="mb-3 text-l uppercase tracking-[0.14em] text-slate-400/60">
               Travel Score
             </p>
@@ -199,6 +261,8 @@ function DestinationDashboardPage() {
           </GlassCard>
 
           <GlassCard className="p-6 text-center">
+            <CardIcon icon={Shield} className="text-emerald-300" />
+            
             <p className="mb-3 text-l uppercase tracking-[0.14em] text-slate-400/60">
               Risk Level
             </p>
@@ -212,6 +276,8 @@ function DestinationDashboardPage() {
           </GlassCard>
 
           <GlassCard className="p-6 text-center md:col-span-2">
+            <CardIcon icon={AlertTriangle} className="text-orange-300" />
+
             <p className="mb-3 text-l uppercase tracking-[0.14em] text-slate-400/60">
               Condition
             </p>
@@ -227,6 +293,8 @@ function DestinationDashboardPage() {
 
         <div className="mt-3 grid w-full max-w-[820px] gap-3 md:grid-cols-2">
           <GlassCard className="p-6">
+            <CardIcon icon={CloudRain} className="text-blue-300" align = "left" />
+
             <h2 className="mb-3 text-l uppercase tracking-[0.14em] text-slate-400/60">
               Weather
             </h2>
@@ -238,6 +306,8 @@ function DestinationDashboardPage() {
           </GlassCard>
 
           <GlassCard className="p-6">
+            <CardIcon icon={Newspaper} className="text-purple-300" align = "left" />
+
             <h2 className="mb-3 text-l uppercase tracking-[0.14em] text-slate-400/60">
               Travel Advisory
             </h2>
@@ -269,35 +339,41 @@ function DestinationDashboardPage() {
       </section>
 
       <section ref={newsRef} className="mx-auto max-w-[800px] px-6 py-20">
+        <Newspaper size={26} className="text-blue-300" strokeWidth={1.8} />
+
         <h2 className="mb-7 text-5xl font-light tracking-[0.14em] text-slate-200">
           Top Travel-Related News
         </h2>
 
         {destination.newsArticles && destination.newsArticles.length > 0 ? (
           <div className="space-y-4">
-            {destination.newsArticles.map((article) => (
+            {destination.newsArticles.map((article, index) => (
               <article key={article.url} className="glass-card p-7">
-                <div className="glass-card-content">
-                  <a
-                    href={article.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block text-3xl font-normal leading-snug text-slate-200 transition hover:text-blue-300"
-                  >
-                    {article.rankPosition
-                      ? `${article.rankPosition}. ${article.title}`
-                      : article.title}
-                  </a>
+                <div className="glass-card-content flex gap-5">
+                  <span className="mt-1 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border border-blue-300/30 bg-white/10 text-base font-light text-blue-200">
+                    {article.rankPosition ?? index + 1}
+                  </span>
 
-                  <p className="mt-3 text-xl font-light leading-relaxed text-slate-400">
-                    {article.abstractedSummary ?? "No summary available."}
-                  </p>
+                  <div>
+                    <a
+                      href={article.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block text-3xl font-normal leading-snug text-slate-200 transition hover:text-blue-300"
+                    >
+                      {article.title}
+                    </a>
 
-                  {article.sourceName && (
-                    <p className="mt-3 text-xs tracking-wide text-slate-400/50">
-                      {article.sourceName}
+                    <p className="mt-3 text-xl font-light leading-relaxed text-slate-400">
+                      {article.abstractedSummary ?? "No summary available."}
                     </p>
-                  )}
+
+                    {article.sourceName && (
+                      <p className="mt-3 text-xs tracking-wide text-slate-400/50">
+                        {article.sourceName}
+                      </p>
+                    )}
+                  </div>
                 </div>
               </article>
             ))}
@@ -310,15 +386,24 @@ function DestinationDashboardPage() {
           </GlassCard>
         )}
 
-        <GlassCard className="mt-4 border-dashed p-7">
-          <h2 className="mb-2 text-sm font-normal text-slate-400">
-            Upcoming Features
-          </h2>
-          <p className="text-sm font-light leading-relaxed text-slate-400/60">
-            Flight search, hotel search, and itinerary planning will be added in
-            later milestones.
-          </p>
+        <GlassCard className="mt-4 p-6">
+          <div className="flex items-start gap-4">
+            <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-white/10 text-slate-300">
+              <Info size={22} strokeWidth={1.8} />
+            </div>
+
+            <div>
+              <h2 className="mb-2 text-lg uppercase tracking-[0.14em] text-slate-400/60">
+                Upcoming Features
+              </h2>
+
+              <p className="text-xl font-light leading-relaxed text-slate-400">
+                Flight search, hotel search, and itinerary planning will be added in later milestones.
+              </p>
+            </div>
+          </div>
         </GlassCard>
+
       </section>
     </main>
   );
