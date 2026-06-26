@@ -121,9 +121,6 @@ function DestinationDashboardPage() {
   // parallex scrolling
   const [scrollY, setScrollY] = useState<number>(0);
 
-  // for mobile hero content
-  const [isMobile, setIsMobile] = useState<boolean>(false);
-
   const newsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -135,20 +132,6 @@ function DestinationDashboardPage() {
     window.addEventListener("scroll", handleScroll, { passive: true });
 
     return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
-
-
-  useEffect(() => {
-  // for mobile
-    function checkScreenSize() {
-      setIsMobile(window.innerWidth < 768);
-    }
-
-    checkScreenSize();
-
-    window.addEventListener("resize", checkScreenSize);
-
-    return () => window.removeEventListener("resize", checkScreenSize);
   }, []);
 
   useEffect(() => {
@@ -217,10 +200,11 @@ function DestinationDashboardPage() {
   }
 
   // Gradually fades and moves the hero section as the user scrolls.
-  const fadeStart = 80;
-  const fadeEnd = 380;
-  const heroOpacity = isMobile ? 1 : scrollY <= fadeStart ? 1 : Math.max(0, 1 - (scrollY - fadeStart) / (fadeEnd - fadeStart));
-  const heroTranslateY = isMobile ? 0 : Math.min(scrollY * 0.28, 120);
+  // Uses screen height so the fade works better on laptops and mobile.
+  const fadeStart = window.innerHeight * 1.4;
+  const fadeEnd = window.innerHeight * 2.2;
+  const heroOpacity = scrollY <= fadeStart ? 1 : Math.max(0, 1 - (scrollY - fadeStart) / (fadeEnd - fadeStart));
+  const heroTranslateY = Math.min(scrollY * 0.06, 50);
 
   return (
     <main className="min-h-screen bg-[linear-gradient(160deg,#030c23_0%,#061428_55%,#02091a_100%)] font-sans">
