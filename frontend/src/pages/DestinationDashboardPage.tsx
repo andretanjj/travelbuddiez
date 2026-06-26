@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 // OLD VERSION: used frontend mock data before backend integration
@@ -9,13 +9,41 @@ import { getDestinationByCountryCode } from "../services/destinationApi";
 
 import type { Destination } from "../types/country";
 
-function getRiskBadgeClass(riskLevel: Destination["riskLevel"]): string {
-  if (riskLevel === "Low") return "bg-green-100 text-green-700";
-  else if (riskLevel === "Medium") return "bg-yellow-100 text-yellow-700";
-  else if (riskLevel === "High") return "bg-red-100 text-red-700";
-  return "bg-gray-100 text-gray-700";
+function getRiskStyles(riskLevel: Destination["riskLevel"]): string {
+  if (riskLevel === "Low") {
+    return "border-green-400/40 bg-green-400/10 text-green-400";
+  }
+  if (riskLevel === "Medium") {
+    return "border-yellow-400/40 bg-yellow-400/10 text-yellow-400";
+  }
+  if (riskLevel === "High") {
+    return "border-red-400/40 bg-red-400/10 text-red-400";
+  }
+  return "border-slate-400/40 bg-slate-400/10 text-slate-400";
 }
 
+
+function getRiskTextClass(riskLevel: Destination["riskLevel"]): string {
+  if (riskLevel === "Low") return "text-green-400";
+  if (riskLevel === "Medium") return "text-yellow-400";
+  if (riskLevel === "High") return "text-red-400";
+  return "text-slate-400";
+}
+
+// glass banner
+function GlassCard({
+  children,
+  className = "",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={`glass-card ${className}`}>
+      <div className="glass-card-content">{children}</div>
+    </div>
+  );
+}
 function DestinationDashboardPage() {
   // reads countryCode from URL, e.g. /destinations/SGP
   const { countryCode } = useParams();
@@ -33,6 +61,22 @@ function DestinationDashboardPage() {
 
   // stores error message if backend request fails
   const [errorMessage, setErrorMessage] = useState<string>("");
+
+  // parallex scrolling
+  const [scrollY, setScrollY] = useState<number>(0);
+
+  const newsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    //parallex scroll effect
+    function handleScroll() {
+      setScrollY(window.scrollY);
+    }
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   useEffect(() => {
     // if countryCode is missing from the URL, stop fetching
@@ -61,184 +105,221 @@ function DestinationDashboardPage() {
     fetchDestination(countryCode);
   }, [countryCode]);
 
+  // helper function for scrolling to news section
+  function scrollToNews() {
+    newsRef.current?.scrollIntoView({ behavior: "smooth" });
+  }
+
   if (isLoading) {
     return (
-      <main className="min-h-screen bg-slate-50 p-8">
-        <div className="mx-auto max-w-3xl rounded-2xl bg-white p-6 shadow">
-          <p className="text-gray-700">Loading destination information...</p>
-        </div>
+      <main className="flex min-h-screen items-center justify-center bg-[linear-gradient(160deg,#030c23_0%,#061428_55%,#02091a_100%)] p-8">
+        <GlassCard className="p-8">
+          <p className="text-base text-slate-400">
+            Loading destination information...
+          </p>
+        </GlassCard>
       </main>
     );
   }
 
   if (destination === null) {
     return (
-      <main className="min-h-screen bg-slate-50 p-8">
-        <div className="mx-auto max-w-3xl rounded-2xl bg-white p-6 shadow">
-          <h1 className="mb-3 text-2xl font-bold text-gray-900">
+      <main className="flex min-h-screen items-center justify-center bg-[linear-gradient(160deg,#030c23_0%,#061428_55%,#02091a_100%)] p-8">
+        <GlassCard className="w-full max-w-md p-8">
+          <h1 className="text-3xl font-light text-slate-200">
             Destination not found
           </h1>
 
-          <p className="mb-6 text-gray-600">{errorMessage}</p>
+          <p className="mt-3 text-sm text-slate-400">{errorMessage}</p>
 
           <Link
             to="/map"
-            className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white"
+            className="mt-6 inline-block text-sm text-blue-400 hover:text-blue-300"
           >
-            Back to Map
+            ← Back to Map
           </Link>
-        </div>
+        </GlassCard>
       </main>
     );
   }
 
+  // Gradually fades and moves the hero section as the user scrolls.
+  const fadeStart = 80;
+  const fadeEnd = 380;
+  const heroOpacity = scrollY <= fadeStart ? 1 : Math.max(0, 1 - (scrollY - fadeStart) / (fadeEnd - fadeStart));
+  const heroTranslateY = Math.min(scrollY * 0.28, 120);
+
   return (
-    <main className="min-h-screen bg-slate-50 p-8">
-      <div className="mx-auto max-w-4xl">
-        <Link to="/map" className="text-sm font-medium text-blue-600">
-          ← Back to Map
+    <main className="min-h-screen bg-[linear-gradient(160deg,#030c23_0%,#061428_55%,#02091a_100%)] font-sans">
+        <Link to="/map" className="glass-card fixed left-5 top-5 z-50 rounded-full px-4 py-2 text-sm text-slate-400 transition hover:text-slate-200">
+          <span className="glass-card-content">← Back to Map</span>
         </Link>
 
-        <section className="mt-6 rounded-2xl bg-white p-6 shadow">
-          <div className="mb-6 flex items-start justify-between gap-4">
-            <div>
-              <p className="text-sm font-medium text-gray-500">
-                Destination Dashboard
-              </p>
+        <section
+        className="relative flex min-h-screen flex-col items-center justify-center px-6 py-24"
+        style={{
+          opacity: heroOpacity,
+          transform: `translateY(-${heroTranslateY}px)`,
+          pointerEvents: heroOpacity < 0.05 ? "none" : "auto",
+        }}
+      >
+        <div className="pointer-events-none absolute left-1/2 top-1/2 h-[40vh] w-[60vw] -translate-x-1/2 -translate-y-[60%] bg-[radial-gradient(ellipse,rgba(59,130,246,0.12)_0%,transparent_70%)]" />
 
-              <h1 className="mt-1 text-3xl font-bold text-gray-900">
-                {destination.country}
-              </h1>
-            </div>
+        <p className="mb-4 text-center text-[15px] uppercase tracking-[0.18em] text-slate-400/50">
+          Destination Dashboard
+        </p>
 
-            <span
-              className={`rounded-full px-3 py-1 text-sm font-semibold ${getRiskBadgeClass(
-                destination.riskLevel
-              )}`}
+        <h1 className="mb-5 text-center text-[clamp(100px,15vw,150px)] font-extralight leading-none tracking-[-0.04em] text-slate-100 [text-shadow:0_0_80px_rgba(100,160,255,0.25)]">
+          {destination.country}
+        </h1>
+        
+        <div
+          className={`mb-11 rounded-full border px-4 py-1 text-sm tracking-wide backdrop-blur ${getRiskStyles(
+            destination.riskLevel
+          )}`}
+        >
+          {destination.riskLevel ?? "Unknown"} Risk
+        </div>
+
+        <div className="grid w-full max-w-[820px] gap-3 md:grid-cols-4">
+          <GlassCard className="p-6 text-center">
+            <p className="mb-3 text-l uppercase tracking-[0.14em] text-slate-400/60">
+              Travel Score
+            </p>
+            <p className="text-6xl font-light leading-relaxed text-slate-200">
+              {destination.travelScore !== null
+                ? destination.travelScore
+                : "—"}
+              {destination.travelScore !== null && (
+                <span className="text-[30px] font-light text-slate-400/60">
+                  /100
+                </span>
+              )}
+            </p>
+          </GlassCard>
+
+          <GlassCard className="p-6 text-center">
+            <p className="mb-3 text-l uppercase tracking-[0.14em] text-slate-400/60">
+              Risk Level
+            </p>
+            <p
+              className={`${
+                destination.riskLevel ? "text-6xl" : "text-4xl"
+              } break-words font-light leading-relaxed ${getRiskTextClass(destination.riskLevel)}`}
             >
-              {destination.riskLevel ?? "Unknown"} Risk
-            </span>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="rounded-xl border border-gray-200 p-4">
-              <p className="text-sm text-gray-500">Travel Score</p>
-              <p className="mt-2 text-3xl font-bold text-gray-900">
-                {destination.travelScore !== null
-                  ? `${destination.travelScore}/100`
-                  : "N/A"}
-              </p>
-            </div>
-
-            <div className="rounded-xl border border-gray-200 p-4">
-              <p className="text-sm text-gray-500">Risk Level</p>
-              <p className="mt-2 text-xl font-semibold text-gray-900">
-                {destination.riskLevel ?? "Unknown"}
-              </p>
-            </div>
-
-            <div className="rounded-xl border border-gray-200 p-4">
-              <p className="text-sm text-gray-500">Condition</p>
-              <p className="mt-2 text-xl font-semibold text-gray-900">
-                {destination.condition ?? "No major safety risk available."}
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-6 grid gap-4 md:grid-cols-2">
-            <div className="rounded-xl border border-gray-200 p-4">
-              <h2 className="mb-2 text-lg font-semibold text-gray-900">
-                Weather
-              </h2>
-
-              <p className="text-gray-700">
-                {typeof destination.weather === "string"
-                  ? destination.weather
-                  : "Weather information unavailable."}
-              </p>
-            </div>
-
-            <div className="rounded-xl border border-gray-200 p-4">
-              <h2 className="mb-2 text-lg font-semibold text-gray-900">
-                Travel Advisory
-              </h2>
-
-              <p className="text-gray-700">
-                {typeof destination.advisory === "string" &&
-                destination.advisory.length > 0
-                  ? destination.advisory
-                  : "No advisory information available."}
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-6 rounded-xl border border-gray-200 p-4">
-            <h2 className="mb-4 text-lg font-semibold text-gray-900">
-              AI Travel News Summary
-            </h2>
-
-            <p className="text-gray-700">
-              {typeof destination.news === "string" &&
-              destination.news.length > 0
-                ? destination.news
-                : "No major travel-related news found."}
+              {destination.riskLevel ?? "Unknown"}
             </p>
-          </div>
+          </GlassCard>
 
-          <div className="mt-6 rounded-xl border border-gray-200 p-4">
-            <h2 className="mb-4 text-lg font-semibold text-gray-900">
-              Top Travel-Related News
+          <GlassCard className="p-6 text-center md:col-span-2">
+            <p className="mb-3 text-l uppercase tracking-[0.14em] text-slate-400/60">
+              Condition
+            </p>
+            <p
+              className={`${
+                destination.condition ? "text-6xl" : "text-3xl"
+              } break-words font-light leading-relaxed text-slate-300`}
+            >
+              {destination.condition ?? "No major safety risk available."}
+            </p>
+          </GlassCard>
+        </div>
+
+        <div className="mt-3 grid w-full max-w-[820px] gap-3 md:grid-cols-2">
+          <GlassCard className="p-6">
+            <h2 className="mb-3 text-l uppercase tracking-[0.14em] text-slate-400/60">
+              Weather
             </h2>
+            <p className="text-3xl font-light leading-relaxed text-slate-300">
+              {typeof destination.weather === "string"
+                ? destination.weather
+                : "Weather information unavailable."}
+            </p>
+          </GlassCard>
 
-            {destination.newsArticles && destination.newsArticles.length > 0 ? (
-              <div className="space-y-4">
-                {destination.newsArticles.map((article) => (
-                  <div
-                    key={article.url}
-                    className="border-b border-gray-200 pb-4 last:border-b-0"
+          <GlassCard className="p-6">
+            <h2 className="mb-3 text-l uppercase tracking-[0.14em] text-slate-400/60">
+              Travel Advisory
+            </h2>
+            <p className="text-3xl font-light leading-relaxed text-slate-300">
+              {typeof destination.advisory === "string" &&
+              destination.advisory.length > 0
+                ? destination.advisory
+                : "No advisory information available."}
+            </p>
+          </GlassCard>
+        </div>
+
+        <button
+          type="button"
+          onClick={scrollToNews}
+          className="absolute bottom-7 flex flex-col items-center gap-1 bg-transparent px-4 py-2 text-slate-400/50 transition hover:text-slate-300"
+        >
+          <span className="text-[11px] uppercase tracking-[0.15em]">
+            Show News
+          </span>
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            className="h-[18px] w-[18px] animate-bounce fill-none stroke-current stroke-2"
+          >
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </button>
+      </section>
+
+      <section ref={newsRef} className="mx-auto max-w-[800px] px-6 py-20">
+        <h2 className="mb-7 text-5xl font-light tracking-[0.14em] text-slate-200">
+          Top Travel-Related News
+        </h2>
+
+        {destination.newsArticles && destination.newsArticles.length > 0 ? (
+          <div className="space-y-4">
+            {destination.newsArticles.map((article) => (
+              <article key={article.url} className="glass-card p-7">
+                <div className="glass-card-content">
+                  <a
+                    href={article.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block text-3xl font-normal leading-snug text-slate-200 transition hover:text-blue-300"
                   >
-                    <a
-                      href={article.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-semibold text-gray-900 hover:text-blue-600 hover:underline"
-                    >
-                      {article.rankPosition
-                        ? `${article.rankPosition}. ${article.title}`
-                        : article.title}
-                    </a>
+                    {article.rankPosition
+                      ? `${article.rankPosition}. ${article.title}`
+                      : article.title}
+                  </a>
 
-                    <p className="mt-2 text-gray-700">
-                      {article.abstractedSummary ?? "No summary available."}
+                  <p className="mt-3 text-xl font-light leading-relaxed text-slate-400">
+                    {article.abstractedSummary ?? "No summary available."}
+                  </p>
+
+                  {article.sourceName && (
+                    <p className="mt-3 text-xs tracking-wide text-slate-400/50">
+                      {article.sourceName}
                     </p>
-
-                    {article.sourceName && (
-                      <p className="mt-2 text-sm text-gray-500">
-                        Source: {article.sourceName}
-                      </p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-gray-700">
-                No travel-related news articles available.
-              </p>
-            )}
+                  )}
+                </div>
+              </article>
+            ))}
           </div>
-
-          <div className="mt-6 rounded-xl border border-dashed border-gray-300 p-4">
-            <h2 className="mb-2 text-lg font-semibold text-gray-900">
-              Upcoming Features
-            </h2>
-
-            <p className="text-gray-700">
-              Flight search, hotel search, and itinerary planning will be added
-              in later milestones.
+        ) : (
+          <GlassCard className="p-10 text-center">
+            <p className="text-xl font-light text-slate-400">
+              No travel-related news articles available.
             </p>
-          </div>
-        </section>
-      </div>
+          </GlassCard>
+        )}
+
+        <GlassCard className="mt-4 border-dashed p-7">
+          <h2 className="mb-2 text-sm font-normal text-slate-400">
+            Upcoming Features
+          </h2>
+          <p className="text-sm font-light leading-relaxed text-slate-400/60">
+            Flight search, hotel search, and itinerary planning will be added in
+            later milestones.
+          </p>
+        </GlassCard>
+      </section>
     </main>
   );
 }

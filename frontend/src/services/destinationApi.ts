@@ -1,8 +1,8 @@
-import type { Destination } from "../types/country";
+import type { Destination, MapDestination } from "../types/country";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL; // backend key
 
-export async function getAllDestinations(): Promise<Destination[]> {
+export async function getAllDestinations(): Promise<MapDestination[]> {
   const response = await fetch(`${API_BASE_URL}/destinations`);
   if (!response.ok) {
     throw new Error("Failed to fetch destinations");
