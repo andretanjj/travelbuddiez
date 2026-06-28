@@ -3,3 +3,9 @@ uvicorn
 python-dotenv
 requests
 psycopg2-binary
+# Used to create and verify JWT access tokens.
+PyJWT
+# Used for secure password hashing.
+pwdlib[argon2]
+# Required because OAuth2PasswordRequestForm uses form data.
+python-multipart

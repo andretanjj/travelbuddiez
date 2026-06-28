@@ -5,22 +5,30 @@ import DestinationDashboardPage from "./pages/DestinationDashboardPage.tsx";
 import ComingSoon from "./pages/ComingSoon.tsx";
 import Navbar from "./components/Navbar.tsx";
 import TravelPlanningPage from "./pages/TravelPlanningPage";
+import LoginPage from "./pages/LoginPage";
+import RegistrationPage from "./pages/RegistrationPage";
+import { AuthProvider } from "./context/AuthContext";
 
 
 function App() {
   return (
     <BrowserRouter>
-      <Navbar />
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/map" element={<ExploreMapPage />} />
-        <Route path="/planning" element={<TravelPlanningPage />} />
-        <Route path="/about" element={<ComingSoon />} />
-        <Route
-          path="/destinations/:countryCode"
-          element={<DestinationDashboardPage />}
-        />
-      </Routes>
+      <AuthProvider>
+        <Navbar />
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/map" element={<ExploreMapPage />} />
+          <Route path="/planning" element={<TravelPlanningPage />} />
+          <Route path="/about" element={<ComingSoon />} />
+          {/* Authentication pages */}
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegistrationPage />} />
+          <Route
+            path="/destinations/:countryCode"
+            element={<DestinationDashboardPage />}
+          />
+        </Routes>
+      </AuthProvider>
     </BrowserRouter>
   );
 }

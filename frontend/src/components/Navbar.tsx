@@ -1,7 +1,13 @@
-import { Link, NavLink } from "react-router-dom";
+import { Link, NavLink, useNavigate } from "react-router-dom";
 import { FiGlobe } from "react-icons/fi";
+import { useAuth } from "../context/AuthContext";
 
 function Navbar() {
+    const navigate = useNavigate();
+
+    // Reads shared auth state from AuthContext.
+    const { user, isLoading, logout } = useAuth();
+
     const navLink = ({ isActive }: { isActive: boolean }) =>
         `
         rounded-full px-4 py-2 text-sm font-medium no-underline transition-all
@@ -11,6 +17,14 @@ function Navbar() {
                 : "text-blue-100/75 hover:bg-white/5 hover:text-white"
         }
         `;
+
+    function handleLogout() {
+        // Clears token and current user from AuthContext.
+        logout();
+
+        // Sends user back to home page.
+        navigate("/");
+    }
 
     return (
         <nav
@@ -51,6 +65,33 @@ function Navbar() {
                 <NavLink className={navLink} to="/about">
                     About
                 </NavLink>
+
+                {/* While checking saved token, avoid showing wrong login/logout buttons. */}
+                {isLoading ? null : user === null ? (
+                    <>
+                        <NavLink className={navLink} to="/login">
+                            Login
+                        </NavLink>
+
+                        <NavLink className={navLink} to="/register">
+                            Register
+                        </NavLink>
+                    </>
+                ) : (
+                    <div className="ml-3 flex items-center gap-3">
+                        <span className="text-sm text-blue-100/75">
+                            Welcome, {user.username}
+                        </span>
+
+                        <button
+                            type="button"
+                            onClick={handleLogout}
+                            className="rounded-full border border-white/10 px-4 py-2 text-sm font-medium text-blue-100/75 transition hover:bg-white/5 hover:text-white"
+                        >
+                            Logout
+                        </button>
+                    </div>
+                )}
             </div>
         </nav>
     );
