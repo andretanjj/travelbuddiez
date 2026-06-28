@@ -450,15 +450,6 @@ def get_gemini_embeddings_batch(text_items):
             embeddings[index] = EMBEDDING_CACHE[cache_key]
             continue
 
-        config = {
-            "taskType": task_type,
-            "outputDimensionality": OUTPUT_DIMENSIONALITY,
-        }
-
-        # Title only helps document retrieval, not query embedding.
-        if title and task_type == "RETRIEVAL_DOCUMENT":
-            config["title"] = title
-
         request_item = {
             "model": "models/" + GEMINI_EMBEDDING_MODEL,
             "content": {
@@ -468,8 +459,13 @@ def get_gemini_embeddings_batch(text_items):
                     }
                 ]
             },
-            "embedContentConfig": config,
+            "taskType": task_type,
+            "outputDimensionality": OUTPUT_DIMENSIONALITY,
         }
+
+        # Title only helps document retrieval, not query embedding.
+        if title and task_type == "RETRIEVAL_DOCUMENT":
+            request_item["title"] = title
 
         requests_to_send.append(request_item)
         positions_to_fill.append({
@@ -508,6 +504,8 @@ def get_gemini_embeddings_batch(text_items):
 
         for returned_embedding, position in zip(returned_embeddings, positions_to_fill):
             vector = returned_embedding["values"]
+
+            print("Embedding dimension:", len(vector))
 
             original_index = position["index"]
             cache_key = position["cacheKey"]

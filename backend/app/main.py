@@ -7,6 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.routes.root import router as root_router
 from app.routes.destination_routes import router as destinations_router
 
+from app.routes.auth_routes import router as auth_router
+
 load_dotenv()
 
 ##debug
@@ -31,3 +33,4 @@ app.add_middleware(
 
 app.include_router(root_router)
 app.include_router(destinations_router)
+app.include_router(auth_router)

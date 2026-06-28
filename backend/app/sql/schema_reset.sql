@@ -6,9 +6,22 @@ DROP TABLE IF EXISTS destination_scores CASCADE;
 DROP TABLE IF EXISTS destination_map_scores CASCADE;
 DROP TABLE IF EXISTS map_advisories CASCADE;
 DROP TABLE IF EXISTS destinations CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
 
 CREATE EXTENSION IF NOT EXISTS vector;
 
+-- Store user accounts--
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(50) NOT NULL UNIQUE,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    hashed_password TEXT NOT NULL,
+    disabled BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- PARENTS destinations --
 CREATE TABLE destinations (
     id SERIAL PRIMARY KEY,
     country_code VARCHAR(3) NOT NULL UNIQUE,
@@ -21,6 +34,7 @@ CREATE TABLE destinations (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- destination scores for destination dashbaord --
 CREATE TABLE destination_scores (
     id SERIAL PRIMARY KEY,
     destination_id INTEGER NOT NULL UNIQUE REFERENCES destinations(id) ON DELETE CASCADE,
@@ -33,6 +47,7 @@ CREATE TABLE destination_scores (
     last_updated TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- map scores for map coloring and tooltip --
 CREATE TABLE destination_map_scores (
     id SERIAL PRIMARY KEY,
     destination_id INTEGER NOT NULL UNIQUE REFERENCES destinations(id) ON DELETE CASCADE,
@@ -47,6 +62,7 @@ CREATE TABLE destination_map_scores (
     last_updated TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- for nlp --
 CREATE TABLE news_articles (
     id SERIAL PRIMARY KEY,
     destination_id INTEGER NOT NULL REFERENCES destinations(id) ON DELETE CASCADE,
@@ -60,6 +76,7 @@ CREATE TABLE news_articles (
     is_relevant BOOLEAN DEFAULT FALSE,
     abstracted_summary TEXT,
     embedding VECTOR(768),
+    rank_position INTEGER,
 
     fetched_at TIMESTAMPTZ DEFAULT NOW(),
     processed_at TIMESTAMPTZ,
@@ -67,6 +84,7 @@ CREATE TABLE news_articles (
     UNIQUE(destination_id, url)
 );
 
+-- for nlp --
 CREATE TABLE nlp_queries (
     id SERIAL PRIMARY KEY,
     query_name VARCHAR(100) NOT NULL UNIQUE,
