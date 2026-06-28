@@ -10,18 +10,14 @@ from app.data.travelscore import (
 
 def test_weather_no_risk_string():
     weather = "clear sky, around 25°C"
-
     result = calculate_weather_deduction(weather)
-
     assert result["deduction"] == 0
     assert result["reasons"] == []
 
 
 def test_weather_heavy_rain_deducts_20():
     weather = "heavy rain expected in the afternoon"
-
     result = calculate_weather_deduction(weather)
-
     assert result["deduction"] == 20
     assert "Weather risk" in result["reasons"]
 
@@ -33,7 +29,6 @@ def test_weather_extreme_hot_temperature_deducts_10():
     }
 
     result = calculate_weather_deduction(weather)
-
     assert result["deduction"] == 10
     assert "Extreme temperature" in result["reasons"]
 
@@ -45,7 +40,6 @@ def test_weather_storm_and_extreme_temperature_deducts_30():
     }
 
     result = calculate_weather_deduction(weather)
-
     assert result["deduction"] == 30
     assert "Weather risk" in result["reasons"]
     assert "Extreme temperature" in result["reasons"]
@@ -61,7 +55,6 @@ def test_news_no_risk():
     ]
 
     result = calculate_news_deduction(news)
-
     assert result["deduction"] == 0
     assert result["reasons"] == []
 
@@ -76,7 +69,6 @@ def test_news_high_risk_deducts_25():
     ]
 
     result = calculate_news_deduction(news)
-
     assert result["deduction"] == 25
     assert "High-risk news" in result["reasons"]
 
@@ -91,7 +83,6 @@ def test_news_medium_risk_deducts_10():
     ]
 
     result = calculate_news_deduction(news)
-
     assert result["deduction"] == 10
     assert "News risk" in result["reasons"]
 
@@ -106,7 +97,6 @@ def test_news_recovery_keywords_no_deduction():
     ]
 
     result = calculate_news_deduction(news)
-
     assert result["deduction"] == 0
     assert result["reasons"] == []
 
@@ -119,7 +109,6 @@ def test_advisory_level_1_no_deduction():
     }
 
     result = calculate_advisory_deduction(advisory)
-
     assert result["deduction"] == 0
     assert result["reasons"] == []
 
@@ -132,7 +121,6 @@ def test_advisory_level_2_deducts_15():
     }
 
     result = calculate_advisory_deduction(advisory)
-
     assert result["deduction"] == 15
     assert "Travel advisory caution" in result["reasons"]
 
@@ -145,16 +133,13 @@ def test_advisory_level_3_deducts_25():
     }
 
     result = calculate_advisory_deduction(advisory)
-
     assert result["deduction"] == 25
     assert "High travel advisory risk" in result["reasons"]
 
 
 def test_advisory_text_high_risk_deducts_35():
     advisory = "Do not travel due to civil unrest."
-
     result = calculate_advisory_deduction(advisory)
-
     assert result["deduction"] == 35
     assert "High travel advisory risk" in result["reasons"]
 
@@ -179,7 +164,6 @@ def test_get_condition_priority_advisory_risk():
     ]
 
     result = get_condition(reasons)
-
     assert result == "Travel Advisory Risk"
 
 
@@ -193,7 +177,6 @@ def test_calculate_travelscore_safe_destination():
     }
 
     result = calculate_travelscore(weather, news, advisory)
-
     assert result["travelScore"] == 100
     assert result["riskLevel"] == "Low"
     assert result["condition"] == "No major safety risk"
@@ -211,18 +194,14 @@ from app.data.travelscore import (
 
 def test_weather_no_risk_string():
     weather = "clear sky, around 25°C"
-
     result = calculate_weather_deduction(weather)
-
     assert result["deduction"] == 0
     assert result["reasons"] == []
 
 
 def test_weather_heavy_rain_deducts_20():
     weather = "heavy rain expected in the afternoon"
-
     result = calculate_weather_deduction(weather)
-
     assert result["deduction"] == 20
     assert "Weather risk" in result["reasons"]
 
@@ -234,7 +213,6 @@ def test_weather_extreme_hot_temperature_deducts_10():
     }
 
     result = calculate_weather_deduction(weather)
-
     assert result["deduction"] == 10
     assert "Extreme temperature" in result["reasons"]
 
@@ -246,7 +224,6 @@ def test_weather_storm_and_extreme_temperature_deducts_30():
     }
 
     result = calculate_weather_deduction(weather)
-
     assert result["deduction"] == 30
     assert "Weather risk" in result["reasons"]
     assert "Extreme temperature" in result["reasons"]
@@ -262,7 +239,6 @@ def test_news_no_risk():
     ]
 
     result = calculate_news_deduction(news)
-
     assert result["deduction"] == 0
     assert result["reasons"] == []
 
@@ -277,7 +253,6 @@ def test_news_high_risk_deducts_25():
     ]
 
     result = calculate_news_deduction(news)
-
     assert result["deduction"] == 25
     assert "High-risk news" in result["reasons"]
 
@@ -292,7 +267,6 @@ def test_news_medium_risk_deducts_10():
     ]
 
     result = calculate_news_deduction(news)
-
     assert result["deduction"] == 10
     assert "News risk" in result["reasons"]
 
@@ -307,7 +281,6 @@ def test_news_recovery_keywords_no_deduction():
     ]
 
     result = calculate_news_deduction(news)
-
     assert result["deduction"] == 0
     assert result["reasons"] == []
 
@@ -320,7 +293,6 @@ def test_advisory_level_1_no_deduction():
     }
 
     result = calculate_advisory_deduction(advisory)
-
     assert result["deduction"] == 0
     assert result["reasons"] == []
 
@@ -333,7 +305,6 @@ def test_advisory_level_2_deducts_15():
     }
 
     result = calculate_advisory_deduction(advisory)
-
     assert result["deduction"] == 15
     assert "Travel advisory caution" in result["reasons"]
 
@@ -346,16 +317,13 @@ def test_advisory_level_3_deducts_25():
     }
 
     result = calculate_advisory_deduction(advisory)
-
     assert result["deduction"] == 25
     assert "High travel advisory risk" in result["reasons"]
 
 
 def test_advisory_text_high_risk_deducts_35():
     advisory = "Do not travel due to civil unrest."
-
     result = calculate_advisory_deduction(advisory)
-
     assert result["deduction"] == 35
     assert "High travel advisory risk" in result["reasons"]
 
@@ -380,7 +348,6 @@ def test_get_condition_priority_advisory_risk():
     ]
 
     result = get_condition(reasons)
-
     assert result == "Travel Advisory Risk"
 
 
@@ -394,7 +361,6 @@ def test_calculate_travelscore_safe_destination():
     }
 
     result = calculate_travelscore(weather, news, advisory)
-
     assert result["travelScore"] == 100
     assert result["riskLevel"] == "Low"
     assert result["condition"] == "No major safety risk"
@@ -421,7 +387,6 @@ def test_calculate_travelscore_combined_risks():
     }
 
     result = calculate_travelscore(weather, news, advisory)
-
     # Weather 30 + news 25 + advisory 15 = 70 deduction.
     assert result["travelScore"] == 30
     assert result["riskLevel"] == "High"

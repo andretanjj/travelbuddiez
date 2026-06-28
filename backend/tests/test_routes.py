@@ -3,13 +3,12 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.services import auth_service
 
+# create a TestClient using the same app object used by the backend.
 
 client = TestClient(app)
 
-
 def test_root_route():
     response = client.get("/")
-
     assert response.status_code == 200
     assert response.json() == {
         "message": "TravelBuddiez backend is running"
@@ -19,7 +18,6 @@ def test_root_route():
 ## Test /auth/register
 def test_register_user_success(monkeypatch):
     from app.routes import auth_routes
-
     fake_user = auth_service.User(
         username="test",
         email="test@example.com",
@@ -27,13 +25,11 @@ def test_register_user_success(monkeypatch):
     )
 
     def fake_create_user(username, email, password):
+        # Mock database user creation so this test does not touch Supabase.
         return fake_user
 
-    monkeypatch.setattr(
-        auth_routes,
-        "create_user",
-        fake_create_user,
-    )
+    # Replace create_user inside auth_routes with our fake function.
+    monkeypatch.setattr(auth_routes,"create_user",fake_create_user)
 
     response = client.post(
         "/auth/register",
