@@ -38,7 +38,7 @@ def test_create_access_token_success(monkeypatch):
     monkeypatch.setattr(auth_service, "JWT_SECRET_KEY", "test-secret-key")
 
     token = auth_service.create_access_token(
-        data={"sub": "andre"},
+        data={"sub": "testuser"},
         expires_delta=timedelta(minutes=30),
     )
 
@@ -50,4 +50,4 @@ def test_create_access_token_missing_secret(monkeypatch):
     monkeypatch.setattr(auth_service, "JWT_SECRET_KEY", None)
 
     with pytest.raises(ValueError):
-        auth_service.create_access_token(data={"sub": "andre"})
+        auth_service.create_access_token(data={"sub": "testuser"})

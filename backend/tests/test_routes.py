@@ -21,8 +21,8 @@ def test_register_user_success(monkeypatch):
     from app.routes import auth_routes
 
     fake_user = auth_service.User(
-        username="andre",
-        email="andre@example.com",
+        username="test",
+        email="test@example.com",
         disabled=False,
     )
 
@@ -38,23 +38,23 @@ def test_register_user_success(monkeypatch):
     response = client.post(
         "/auth/register",
         json={
-            "username": "andre",
-            "email": "andre@example.com",
+            "username": "test",
+            "email": "test@example.com",
             "password": "password123",
         },
     )
 
     assert response.status_code == 200
-    assert response.json()["username"] == "andre"
-    assert response.json()["email"] == "andre@example.com"
+    assert response.json()["username"] == "test"
+    assert response.json()["email"] == "test@example.com"
 
 
 def test_register_user_short_password():
     response = client.post(
         "/auth/register",
         json={
-            "username": "andre",
-            "email": "andre@example.com",
+            "username": "test",
+            "email": "test@example.com",
             "password": "short",
         },
     )
@@ -68,8 +68,8 @@ def test_login_success(monkeypatch):
     from app.routes import auth_routes
 
     fake_user = auth_service.UserInDB(
-        username="andre",
-        email="andre@example.com",
+        username="test",
+        email="test@example.com",
         disabled=False,
         hashed_password="fakehash",
     )
@@ -95,7 +95,7 @@ def test_login_success(monkeypatch):
     response = client.post(
         "/auth/token",
         data={
-            "username": "andre",
+            "username": "test",
             "password": "password123",
         },
     )
@@ -122,7 +122,7 @@ def test_login_wrong_password(monkeypatch):
     response = client.post(
         "/auth/token",
         data={
-            "username": "andre",
+            "username": "test",
             "password": "wrongpassword",
         },
     )
@@ -136,8 +136,8 @@ def test_read_users_me_success():
     from app.routes.auth_routes import get_current_active_user
 
     fake_user = auth_service.User(
-        username="andre",
-        email="andre@example.com",
+        username="test",
+        email="test@example.com",
         disabled=False,
     )
 
@@ -156,8 +156,8 @@ def test_read_users_me_success():
     app.dependency_overrides = {}
 
     assert response.status_code == 200
-    assert response.json()["username"] == "andre"
-    assert response.json()["email"] == "andre@example.com"
+    assert response.json()["username"] == "test"
+    assert response.json()["email"] == "test@example.com"
 
 
 #Test destination update routes
