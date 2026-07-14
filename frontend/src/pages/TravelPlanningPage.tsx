@@ -12,16 +12,18 @@ function TravelPlanningPage() {
   const [activeTab, setActiveTab] = useState<ActiveTravelTab>("flights");
 
   // Flight search form states.
+  // Current prototype uses airport / city codes because Duffel expects codes like SIN, HND, NRT, TYO.
   const [origin, setOrigin] = useState("SIN");
-  const [destination, setDestination] = useState("Tokyo");
-  const [departureDate, setDepartureDate] = useState("2026-07-20");
+  const [destination, setDestination] = useState("HND");
+  const [departureDate, setDepartureDate] = useState("2026-08-20");
 
   // Hotel search form states.
-  const [hotelCity, setHotelCity] = useState("Tokyo");
-  const [checkInDate, setCheckInDate] = useState("2026-07-20");
-  const [checkOutDate, setCheckOutDate] = useState("2026-07-25");
+  // Current prototype uses city / airport codes because LiteAPI rates search accepts iataCode.
+  const [hotelCity, setHotelCity] = useState("TYO");
+  const [checkInDate, setCheckInDate] = useState("2026-08-20");
+  const [checkOutDate, setCheckOutDate] = useState("2026-08-25");
 
-  // Shared search input.
+  // Shared search input for flights and hotels.
   const [adults, setAdults] = useState(1);
 
   // Price alert states remain frontend-only for now.
@@ -40,7 +42,7 @@ function TravelPlanningPage() {
   const hotelTargetPrice = Number(hotelAlertPrice);
 
   async function handleSearch(event: React.FormEvent<HTMLFormElement>) {
-    // Prevent browser refresh when form is submitted.
+    // Prevent browser refresh when the form is submitted.
     event.preventDefault();
 
     setIsLoading(true);
@@ -49,6 +51,7 @@ function TravelPlanningPage() {
     try {
       if (activeTab === "flights") {
         // Calls backend GET /travel/flights/search.
+        // Backend then tries Duffel first and falls back to mock data if needed.
         const flightResponse = await searchFlights({
           origin,
           destination,
@@ -59,6 +62,7 @@ function TravelPlanningPage() {
         setFlights(flightResponse.results);
       } else {
         // Calls backend GET /travel/hotels/search.
+        // Backend then tries LiteAPI / Nuitee first and falls back to mock data if needed.
         const hotelResponse = await searchHotels({
           city: hotelCity,
           checkInDate,
@@ -84,8 +88,13 @@ function TravelPlanningPage() {
       <div className="mx-auto max-w-5xl">
         <h1 className="mb-2 text-3xl font-bold">Travel Planning</h1>
 
-        <p className="mb-8 text-slate-400">
+        <p className="text-slate-400">
           Search and compare available flights and hotels.
+        </p>
+
+        <p className="mb-8 mt-2 text-xs text-slate-500">
+          Flight results are powered by Duffel. Hotel prices are powered by
+          LiteAPI / Nuitee.
         </p>
 
         {/* Toggle buttons */}
@@ -123,126 +132,141 @@ function TravelPlanningPage() {
           className="mb-8 rounded-2xl border border-slate-800 bg-slate-900 p-5"
         >
           {activeTab === "flights" ? (
-            <div className="grid gap-4 md:grid-cols-4">
-              <div>
-                <label className="mb-2 block text-sm text-slate-400">
-                  From airport / city code
-                </label>
+            <>
+              <div className="grid gap-4 md:grid-cols-4">
+                <div>
+                  <label className="mb-2 block text-sm text-slate-400">
+                    From
+                  </label>
 
-                <input
-                  type="text"
-                  value={origin}
-                  onChange={(event) => setOrigin(event.target.value)}
-                  required
-                  placeholder="SIN"
-                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-amber-500"
-                />
+                  <input
+                    type="text"
+                    value={origin}
+                    onChange={(event) => setOrigin(event.target.value)}
+                    required
+                    placeholder="e.g. SIN for Singapore"
+                    className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm text-slate-400">
+                    To
+                  </label>
+
+                  <input
+                    type="text"
+                    value={destination}
+                    onChange={(event) => setDestination(event.target.value)}
+                    required
+                    placeholder="e.g. HND for Tokyo Haneda"
+                    className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm text-slate-400">
+                    Departure date
+                  </label>
+
+                  <input
+                    type="date"
+                    value={departureDate}
+                    onChange={(event) => setDepartureDate(event.target.value)}
+                    required
+                    className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm text-slate-400">
+                    Adults
+                  </label>
+
+                  <input
+                    type="number"
+                    min={1}
+                    value={adults}
+                    onChange={(event) => setAdults(Number(event.target.value))}
+                    required
+                    className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-amber-500"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="mb-2 block text-sm text-slate-400">
-                  To airport / city / country
-                </label>
-
-                <input
-                  type="text"
-                  value={destination}
-                  onChange={(event) => setDestination(event.target.value)}
-                  required
-                  placeholder="Tokyo"
-                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-amber-500"
-                />
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm text-slate-400">
-                  Departure date
-                </label>
-
-                <input
-                  type="date"
-                  value={departureDate}
-                  onChange={(event) => setDepartureDate(event.target.value)}
-                  required
-                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-amber-500"
-                />
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm text-slate-400">
-                  Adults
-                </label>
-
-                <input
-                  type="number"
-                  min={1}
-                  value={adults}
-                  onChange={(event) => setAdults(Number(event.target.value))}
-                  required
-                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-amber-500"
-                />
-              </div>
-            </div>
+              <p className="mt-3 text-xs text-slate-500">
+                Prototype note: use airport or city codes for now, such as SIN,
+                HND, NRT, TYO, or KUL. Search suggestions will be added later.
+              </p>
+            </>
           ) : (
-            <div className="grid gap-4 md:grid-cols-4">
-              <div>
-                <label className="mb-2 block text-sm text-slate-400">
-                  Destination city / area
-                </label>
+            <>
+              <div className="grid gap-4 md:grid-cols-4">
+                <div>
+                  <label className="mb-2 block text-sm text-slate-400">
+                    Hotel destination
+                  </label>
 
-                <input
-                  type="text"
-                  value={hotelCity}
-                  onChange={(event) => setHotelCity(event.target.value)}
-                  required
-                  placeholder="Tokyo"
-                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-amber-500"
-                />
+                  <input
+                    type="text"
+                    value={hotelCity}
+                    onChange={(event) => setHotelCity(event.target.value)}
+                    required
+                    placeholder="e.g. TYO for Tokyo"
+                    className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm text-slate-400">
+                    Check-in
+                  </label>
+
+                  <input
+                    type="date"
+                    value={checkInDate}
+                    onChange={(event) => setCheckInDate(event.target.value)}
+                    required
+                    className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm text-slate-400">
+                    Check-out
+                  </label>
+
+                  <input
+                    type="date"
+                    value={checkOutDate}
+                    onChange={(event) => setCheckOutDate(event.target.value)}
+                    required
+                    className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm text-slate-400">
+                    Adults
+                  </label>
+
+                  <input
+                    type="number"
+                    min={1}
+                    value={adults}
+                    onChange={(event) => setAdults(Number(event.target.value))}
+                    required
+                    className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-amber-500"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="mb-2 block text-sm text-slate-400">
-                  Check-in
-                </label>
-
-                <input
-                  type="date"
-                  value={checkInDate}
-                  onChange={(event) => setCheckInDate(event.target.value)}
-                  required
-                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-amber-500"
-                />
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm text-slate-400">
-                  Check-out
-                </label>
-
-                <input
-                  type="date"
-                  value={checkOutDate}
-                  onChange={(event) => setCheckOutDate(event.target.value)}
-                  required
-                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-amber-500"
-                />
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm text-slate-400">
-                  Adults
-                </label>
-
-                <input
-                  type="number"
-                  min={1}
-                  value={adults}
-                  onChange={(event) => setAdults(Number(event.target.value))}
-                  required
-                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-amber-500"
-                />
-              </div>
-            </div>
+              <p className="mt-3 text-xs text-slate-500">
+                Prototype note: use destination codes for now, such as TYO for
+                Tokyo, SIN for Singapore, or KUL for Kuala Lumpur. Hotel names
+                and ratings will be enriched later.
+              </p>
+            </>
           )}
 
           <button
@@ -363,7 +387,7 @@ function TravelPlanningPage() {
 
               {!isLoading && flights.length === 0 && (
                 <p className="text-slate-400">
-                  No flights found yet. Try searching SIN to Tokyo.
+                  No flights found yet. Try searching SIN to HND.
                 </p>
               )}
             </div>
@@ -398,9 +422,12 @@ function TravelPlanningPage() {
                         {hotel.city}, {hotel.country}
                       </p>
 
-                      <p className="mt-1 text-sm text-slate-400">
-                        Rating: {hotel.rating}/10
-                      </p>
+                      {/* Hide rating when provider metadata has not been enriched yet. */}
+                      {hotel.rating > 0 && (
+                        <p className="mt-1 text-sm text-slate-400">
+                          Rating: {hotel.rating}/10
+                        </p>
+                      )}
 
                       <p className="mt-1 text-sm text-slate-500">
                         {hotel.checkInDate} → {hotel.checkOutDate}
@@ -426,7 +453,7 @@ function TravelPlanningPage() {
 
               {!isLoading && hotels.length === 0 && (
                 <p className="text-slate-400">
-                  No hotels found yet. Try searching Tokyo.
+                  No hotels found yet. Try searching TYO.
                 </p>
               )}
             </div>
