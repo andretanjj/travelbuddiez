@@ -1,6 +1,7 @@
 import type {
   FlightSearchResponse,
   HotelSearchResponse,
+  TravelPlaceSuggestionResponse,
 } from "../types/travel";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
@@ -55,6 +56,29 @@ export async function searchHotels(params: {
 
   const response = await fetch(
     `${API_BASE_URL}/travel/hotels/search?${queryParams.toString()}`
+  );
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response));
+  }
+
+  return response.json();
+}
+
+
+export async function searchTravelPlaces(
+  query: string,
+  mode: "flight" | "hotel"
+): Promise<TravelPlaceSuggestionResponse> {
+  // Backend requires at least 2 characters before searching.
+  // mode lets backend rank results differently for flight vs hotel autocomplete.
+  const queryParams = new URLSearchParams({
+    query,
+    mode,
+  });
+
+  const response = await fetch(
+    `${API_BASE_URL}/travel/places?${queryParams.toString()}`
   );
 
   if (!response.ok) {

@@ -35,3 +35,21 @@ export interface FlightSearchResponse {
 export interface HotelSearchResponse {
   results: HotelResult[];
 }
+
+// Suggestion shown in the Travel Planning autocomplete dropdown.
+// Backend returns this from GET /travel/places?query=...
+export interface TravelPlaceSuggestion {
+  id: string;
+  name: string;
+  subtitle: string | null;
+  code: string | null;
+  city: string | null;
+  country: string | null;
+  countryCode: string | null;
+  type: string;
+  provider: string;
+}
+
+export interface TravelPlaceSuggestionResponse {
+  results: TravelPlaceSuggestion[];
+}

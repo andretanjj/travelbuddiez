@@ -1,24 +1,32 @@
-import { useState } from "react";
-import { Plane, Hotel, Search } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Plane, Hotel, Search, MapPin } from "lucide-react";
 
-import { searchFlights, searchHotels } from "../services/travelApi";
+import {
+  searchFlights,
+  searchHotels,
+  searchTravelPlaces,
+} from "../services/travelApi";
+
 import type {
   ActiveTravelTab,
   FlightResult,
   HotelResult,
+  TravelPlaceSuggestion,
 } from "../types/travel";
+
+type SuggestionTarget = "origin" | "destination" | "hotel";
 
 function TravelPlanningPage() {
   const [activeTab, setActiveTab] = useState<ActiveTravelTab>("flights");
 
   // Flight search form states.
-  // Current prototype uses airport / city codes because Duffel expects codes like SIN, HND, NRT, TYO.
+  // The user sees normal place names, but selected suggestions store travel codes like SIN, HND, TYO.
   const [origin, setOrigin] = useState("SIN");
   const [destination, setDestination] = useState("HND");
   const [departureDate, setDepartureDate] = useState("2026-08-20");
 
   // Hotel search form states.
-  // Current prototype uses city / airport codes because LiteAPI rates search accepts iataCode.
+  // LiteAPI currently searches by selected destination code such as TYO or SIN.
   const [hotelCity, setHotelCity] = useState("TYO");
   const [checkInDate, setCheckInDate] = useState("2026-08-20");
   const [checkOutDate, setCheckOutDate] = useState("2026-08-25");
@@ -38,8 +46,71 @@ function TravelPlanningPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
+  // Autocomplete states.
+  const [suggestions, setSuggestions] = useState<TravelPlaceSuggestion[]>([]);
+  const [activeSuggestionTarget, setActiveSuggestionTarget] =
+    useState<SuggestionTarget | null>(null);
+  const [isSuggestionLoading, setIsSuggestionLoading] = useState(false);
+
+  // Used to avoid searching when the user just selected an option.
+  const justSelectedSuggestionRef = useRef(false);
+
   const targetPrice = Number(alertPrice);
   const hotelTargetPrice = Number(hotelAlertPrice);
+
+  const activeSearchText =
+    activeSuggestionTarget === "origin"
+      ? origin
+      : activeSuggestionTarget === "destination"
+        ? destination
+        : activeSuggestionTarget === "hotel"
+          ? hotelCity
+          : "";
+
+  useEffect(() => {
+    // Do not search if no input is active.
+    if (activeSuggestionTarget === null) {
+      setSuggestions([]);
+      return;
+    }
+
+    // Do not immediately search again after selecting a suggestion.
+    if (justSelectedSuggestionRef.current) {
+      justSelectedSuggestionRef.current = false;
+      return;
+    }
+
+    const cleanedSearchText = activeSearchText.trim();
+
+    // Backend requires at least 2 characters.
+    if (cleanedSearchText.length < 2) {
+      setSuggestions([]);
+      return;
+    }
+
+    // Debounce: wait briefly after the user stops typing before calling backend.
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        setIsSuggestionLoading(true);
+
+        const suggestionMode = activeSuggestionTarget === "hotel" ? "hotel" : "flight";
+
+        const response = await searchTravelPlaces(
+          cleanedSearchText,
+          suggestionMode
+        );
+
+        setSuggestions(response.results);
+      } catch (error) {
+        console.error("Failed to load travel place suggestions:", error);
+        setSuggestions([]);
+      } finally {
+        setIsSuggestionLoading(false);
+      }
+    }, 300);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [activeSearchText, activeSuggestionTarget]);
 
   async function handleSearch(event: React.FormEvent<HTMLFormElement>) {
     // Prevent browser refresh when the form is submitted.
@@ -47,6 +118,8 @@ function TravelPlanningPage() {
 
     setIsLoading(true);
     setErrorMessage("");
+    setSuggestions([]);
+    setActiveSuggestionTarget(null);
 
     try {
       if (activeTab === "flights") {
@@ -83,6 +156,73 @@ function TravelPlanningPage() {
     }
   }
 
+  function handleSuggestionSelect(suggestion: TravelPlaceSuggestion) {
+    // Use provider code when available because Duffel/LiteAPI need codes like SIN, HND, TYO.
+    // Fallback to name so the UI still works for suggestions without a code.
+    const selectedValue = suggestion.code || suggestion.name;
+
+    justSelectedSuggestionRef.current = true;
+
+    if (activeSuggestionTarget === "origin") {
+      setOrigin(selectedValue);
+    }
+
+    if (activeSuggestionTarget === "destination") {
+      setDestination(selectedValue);
+    }
+
+    if (activeSuggestionTarget === "hotel") {
+      setHotelCity(selectedValue);
+    }
+
+    setSuggestions([]);
+    setActiveSuggestionTarget(null);
+  }
+
+  function renderSuggestions(target: SuggestionTarget) {
+    if (activeSuggestionTarget !== target) {
+      return null;
+    }
+
+    if (suggestions.length === 0 && !isSuggestionLoading) {
+      return null;
+    }
+
+    return (
+      <div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-xl border border-slate-700 bg-slate-950 shadow-2xl">
+        {isSuggestionLoading && (
+          <div className="px-4 py-3 text-sm text-slate-400">
+            Searching places...
+          </div>
+        )}
+
+        {!isSuggestionLoading &&
+          suggestions.map((suggestion) => (
+            <button
+              key={`${suggestion.provider}-${suggestion.id}`}
+              type="button"
+              onMouseDown={() => handleSuggestionSelect(suggestion)}
+              className="flex w-full items-start gap-3 px-4 py-3 text-left transition hover:bg-slate-800"
+            >
+              <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-400" />
+
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-semibold text-white">
+                  {suggestion.name}
+                </span>
+
+                <span className="block truncate text-xs text-slate-400">
+                  {suggestion.subtitle || suggestion.country || suggestion.city}
+                  {suggestion.code ? ` · ${suggestion.code}` : ""}
+                  {suggestion.type ? ` · ${suggestion.type}` : ""}
+                </span>
+              </span>
+            </button>
+          ))}
+      </div>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-10 text-white">
       <div className="mx-auto max-w-5xl">
@@ -93,8 +233,8 @@ function TravelPlanningPage() {
         </p>
 
         <p className="mb-8 mt-2 text-xs text-slate-500">
-          Flight results are powered by Duffel. Hotel prices are powered by
-          LiteAPI / Nuitee.
+          Flight results are powered by Duffel. Hotel availability and prices
+          are powered by LiteAPI / Nuitee.
         </p>
 
         {/* Toggle buttons */}
@@ -134,7 +274,7 @@ function TravelPlanningPage() {
           {activeTab === "flights" ? (
             <>
               <div className="grid gap-4 md:grid-cols-4">
-                <div>
+                <div className="relative">
                   <label className="mb-2 block text-sm text-slate-400">
                     From
                   </label>
@@ -142,14 +282,20 @@ function TravelPlanningPage() {
                   <input
                     type="text"
                     value={origin}
-                    onChange={(event) => setOrigin(event.target.value)}
+                    onFocus={() => setActiveSuggestionTarget("origin")}
+                    onChange={(event) => {
+                      setOrigin(event.target.value);
+                      setActiveSuggestionTarget("origin");
+                    }}
                     required
-                    placeholder="e.g. SIN for Singapore"
+                    placeholder="e.g. Singapore"
                     className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-amber-500"
                   />
+
+                  {renderSuggestions("origin")}
                 </div>
 
-                <div>
+                <div className="relative">
                   <label className="mb-2 block text-sm text-slate-400">
                     To
                   </label>
@@ -157,11 +303,17 @@ function TravelPlanningPage() {
                   <input
                     type="text"
                     value={destination}
-                    onChange={(event) => setDestination(event.target.value)}
+                    onFocus={() => setActiveSuggestionTarget("destination")}
+                    onChange={(event) => {
+                      setDestination(event.target.value);
+                      setActiveSuggestionTarget("destination");
+                    }}
                     required
-                    placeholder="e.g. HND for Tokyo Haneda"
+                    placeholder="e.g. Tokyo"
                     className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-amber-500"
                   />
+
+                  {renderSuggestions("destination")}
                 </div>
 
                 <div>
@@ -195,14 +347,14 @@ function TravelPlanningPage() {
               </div>
 
               <p className="mt-3 text-xs text-slate-500">
-                Prototype note: use airport or city codes for now, such as SIN,
-                HND, NRT, TYO, or KUL. Search suggestions will be added later.
+                Start typing a destination, then choose a suggestion. The app
+                uses the selected travel code for live flight search.
               </p>
             </>
           ) : (
             <>
               <div className="grid gap-4 md:grid-cols-4">
-                <div>
+                <div className="relative">
                   <label className="mb-2 block text-sm text-slate-400">
                     Hotel destination
                   </label>
@@ -210,11 +362,17 @@ function TravelPlanningPage() {
                   <input
                     type="text"
                     value={hotelCity}
-                    onChange={(event) => setHotelCity(event.target.value)}
+                    onFocus={() => setActiveSuggestionTarget("hotel")}
+                    onChange={(event) => {
+                      setHotelCity(event.target.value);
+                      setActiveSuggestionTarget("hotel");
+                    }}
                     required
-                    placeholder="e.g. TYO for Tokyo"
+                    placeholder="e.g. Tokyo"
                     className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-amber-500"
                   />
+
+                  {renderSuggestions("hotel")}
                 </div>
 
                 <div>
@@ -262,9 +420,8 @@ function TravelPlanningPage() {
               </div>
 
               <p className="mt-3 text-xs text-slate-500">
-                Prototype note: use destination codes for now, such as TYO for
-                Tokyo, SIN for Singapore, or KUL for Kuala Lumpur. Hotel names
-                and ratings will be enriched later.
+                Start typing a city, airport, or area, then choose a suggestion.
+                Hotel names and ratings are enriched from LiteAPI / Nuitee.
               </p>
             </>
           )}
@@ -316,7 +473,7 @@ function TravelPlanningPage() {
 
             <input
               type="number"
-              placeholder="Notify me when hotels are below this price per night"
+              placeholder="Notify me when hotels are below this total stay price"
               value={hotelAlertPrice}
               onChange={(event) => setHotelAlertPrice(event.target.value)}
               className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-amber-500"
@@ -387,7 +544,7 @@ function TravelPlanningPage() {
 
               {!isLoading && flights.length === 0 && (
                 <p className="text-slate-400">
-                  No flights found yet. Try searching SIN to HND.
+                  No flights found yet. Try searching Singapore to Tokyo.
                 </p>
               )}
             </div>
@@ -441,7 +598,7 @@ function TravelPlanningPage() {
                     </div>
 
                     <div className="text-left md:text-right">
-                      <p className="text-sm text-slate-400">per night from</p>
+                      <p className="text-sm text-slate-400">total for stay</p>
 
                       <p className="text-2xl font-bold text-amber-500">
                         {hotel.currency} {hotel.price}
@@ -453,7 +610,7 @@ function TravelPlanningPage() {
 
               {!isLoading && hotels.length === 0 && (
                 <p className="text-slate-400">
-                  No hotels found yet. Try searching TYO.
+                  No hotels found yet. Try searching Tokyo.
                 </p>
               )}
             </div>
