@@ -9,6 +9,9 @@ from app.routes.destination_routes import router as destinations_router
 
 from app.routes.auth_routes import router as auth_router
 
+# Travel planning routes for flight and hotel search.
+from app.routes.travel_routes import router as travel_router
+
 load_dotenv()
 
 ##debug
@@ -34,3 +37,4 @@ app.add_middleware(
 app.include_router(root_router)
 app.include_router(destinations_router)
 app.include_router(auth_router)
+app.include_router(travel_router)
