@@ -6,46 +6,144 @@ LITEAPI_API_KEY = os.getenv("LITEAPI_API_KEY")
 LITEAPI_BASE_URL = os.getenv("LITEAPI_BASE_URL", "https://api.liteapi.travel/v3.0")
 
 
-def normalise_liteapi_hotel(hotel_rate, check_in_date: str, check_out_date: str):
+def get_liteapi_headers():
     """
-    Converts one LiteAPI hotel rate result into the simplified HotelResult shape
-    used by the frontend.
+    Builds headers for LiteAPI requests.
 
-    LiteAPI /hotels/rates gives hotelId and pricing data.
-    Hotel name/city/country are not always included here, so we use safe fallback labels.
-    Later, we can call /data/hotels to enrich this with full hotel metadata.
+    Keep the API key in the backend only.
+    Never expose this key in the Vite frontend.
     """
 
-    hotel_id = hotel_rate.get("hotelId", "unknown-hotel")
+    return {
+        "X-API-Key": LITEAPI_API_KEY,
+        "Content-Type": "application/json",
+    }
 
-    # Default fallback values.
+
+def get_hotel_price_and_currency(hotel_rate):
+    """
+    Extracts the cheapest available rate from one LiteAPI hotel rate result.
+
+    The /hotels/rates response contains:
+    - hotelId
+    - roomTypes
+    - rates
+    - retailRate.total
+    """
+
     price = 0
     currency = "USD"
-    rating = 0
 
     room_types = hotel_rate.get("roomTypes", [])
 
-    if len(room_types) > 0:
-        first_room_type = room_types[0]
-        rates = first_room_type.get("rates", [])
+    if len(room_types) == 0:
+        return price, currency
 
-        if len(rates) > 0:
-            first_rate = rates[0]
-            retail_rate = first_rate.get("retailRate", {})
-            total_prices = retail_rate.get("total", [])
+    first_room_type = room_types[0]
+    rates = first_room_type.get("rates", [])
 
-            if len(total_prices) > 0:
-                price = float(total_prices[0].get("amount", 0))
-                currency = total_prices[0].get("currency", "USD")
+    if len(rates) == 0:
+        return price, currency
+
+    first_rate = rates[0]
+    retail_rate = first_rate.get("retailRate", {})
+    total_prices = retail_rate.get("total", [])
+
+    if len(total_prices) == 0:
+        return price, currency
+
+    price = float(total_prices[0].get("amount", 0))
+    currency = total_prices[0].get("currency", "USD")
+
+    return price, currency
+
+
+def fetch_liteapi_hotel_details(hotel_id: str):
+    """
+    Fetches full hotel metadata from LiteAPI /data/hotel.
+
+    This gives real hotel name, city, country, address, rating, images, etc.
+    If the metadata call fails, return None so the caller can use fallback labels.
+    """
+
+    url = f"{LITEAPI_BASE_URL}/data/hotel"
+
+    response = requests.get(
+        url,
+        headers=get_liteapi_headers(),
+        params={"hotelId": hotel_id},
+        timeout=20,
+    )
+
+    if not response.ok:
+        print(f"LiteAPI hotel metadata failed for {hotel_id}: {response.status_code} {response.text}")
+        return None
+
+    response_data = response.json()
+
+    # LiteAPI may return either {"data": {...}} or the hotel object directly.
+    return response_data.get("data") or response_data
+
+
+def normalise_liteapi_hotel(hotel_rate, hotel_details, check_in_date: str, check_out_date: str):
+    """
+    Merges LiteAPI rate data with hotel metadata.
+
+    Rate data provides:
+    - hotelId
+    - price
+    - currency
+
+    Hotel metadata provides:
+    - name
+    - city
+    - country
+    - star rating
+    """
+
+    hotel_id = hotel_rate.get("hotelId", "unknown-hotel")
+    price, currency = get_hotel_price_and_currency(hotel_rate)
+
+    # Metadata fallback values.
+    hotel_name = f"Hotel {hotel_id}"
+    city = "Selected destination"
+    country = "Available via LiteAPI"
+    rating = 0
+
+    if hotel_details is not None:
+        # Use safe .get() calls because provider fields can vary.
+        hotel_name = (
+            hotel_details.get("name")
+            or hotel_details.get("hotelName")
+            or hotel_name
+        )
+
+        city = (
+            hotel_details.get("city")
+            or hotel_details.get("cityName")
+            or hotel_details.get("address", {}).get("city")
+            or city
+        )
+
+        country = (
+            hotel_details.get("country")
+            or hotel_details.get("countryCode")
+            or hotel_details.get("address", {}).get("country")
+            or country
+        )
+
+        rating = float(
+            hotel_details.get("rating")
+            or hotel_details.get("starRating")
+            or hotel_details.get("stars")
+            or 0
+        )
 
     return {
         "id": str(hotel_id),
-
-        # Temporary display until we add /data/hotels metadata enrichment.
-        "name": f"Hotel {hotel_id}",
-        "city": "Selected destination",
-        "country": "Available via LiteAPI",
-
+        "name": hotel_name,
+        "city": city,
+        "country": country,
         "price": price,
         "currency": currency,
         "rating": rating,
@@ -56,28 +154,18 @@ def normalise_liteapi_hotel(hotel_rate, check_in_date: str, check_out_date: str)
 
 def search_liteapi_hotels(city: str, check_in_date: str, check_out_date: str, adults: int):
     """
-    Calls LiteAPI hotel rates endpoint.
+    Searches LiteAPI hotels.
 
-    Current:
-    - Searches by cityName using natural city input from the frontend.
-    - Uses Singapore as guest nationality for the current TravelBuddiez user base.
-    - Returns cheapest available hotels first.
-
-    Later:
-    - Replace city text input with LiteAPI Places autocomplete and pass placeId.
+    Flow:
+    1. Call /hotels/rates to get bookable hotel IDs and real prices.
+    2. Call /data/hotel for each hotelId to get real names/details.
+    3. Merge price + metadata into the frontend HotelResult shape.
     """
 
     if not LITEAPI_API_KEY:
         raise RuntimeError("LITEAPI_API_KEY is missing")
 
-    url = f"{LITEAPI_BASE_URL}/hotels/rates"
-
-    headers = {
-        # LiteAPI dashboard/API reference uses an API key credential in request headers.
-        # Keep this server-side only; never expose it in the Vite frontend.
-        "X-API-Key": LITEAPI_API_KEY,
-        "Content-Type": "application/json",
-    }
+    rates_url = f"{LITEAPI_BASE_URL}/hotels/rates"
 
     payload = {
         "checkin": check_in_date,
@@ -91,37 +179,51 @@ def search_liteapi_hotels(city: str, check_in_date: str, check_out_date: str, ad
         ],
 
         # LiteAPI rates endpoint accepts iataCode as one valid search method.
-        # For now, the frontend city input should contain an IATA city/airport code,
-        # for example TYO, HND, NRT, SIN, or KUL.
+        # For now, the frontend hotel destination input should contain codes like TYO or SIN.
         "iataCode": city.upper(),
 
-        # Keep results small for faster MS2 demo and cheaper API usage.
+        # Keep results small for faster demo and lower API usage.
         "limit": 10,
         "timeout": 10,
         "maxRatesPerHotel": 1,
     }
 
-    response = requests.post(url, headers=headers, json=payload, timeout=20)
+    rates_response = requests.post(
+        rates_url,
+        headers=get_liteapi_headers(),
+        json=payload,
+        timeout=20,
+    )
 
-    if not response.ok:
-        raise RuntimeError(f"LiteAPI hotel request failed: {response.status_code} {response.text}")
+    if not rates_response.ok:
+        raise RuntimeError(
+            f"LiteAPI hotel rates request failed: {rates_response.status_code} {rates_response.text}"
+        )
 
-    response_data = response.json()
+    rates_data = rates_response.json()
 
-    # LiteAPI responses may store hotel rates under different top-level keys.
     hotel_rates = (
-        response_data.get("data")
-        or response_data.get("hotels")
-        or response_data.get("results")
+        rates_data.get("data")
+        or rates_data.get("hotels")
+        or rates_data.get("results")
         or []
     )
 
     normalised_hotels = []
 
     for hotel_rate in hotel_rates[:10]:
+        hotel_id = hotel_rate.get("hotelId")
+
+        # If hotelId is missing, metadata cannot be fetched.
+        hotel_details = None
+
+        if hotel_id:
+            hotel_details = fetch_liteapi_hotel_details(hotel_id)
+
         normalised_hotels.append(
             normalise_liteapi_hotel(
                 hotel_rate=hotel_rate,
+                hotel_details=hotel_details,
                 check_in_date=check_in_date,
                 check_out_date=check_out_date,
             )
