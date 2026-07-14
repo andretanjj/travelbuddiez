@@ -1,4 +1,5 @@
 from app.services.duffel_flight_service import search_duffel_flights
+from app.services.liteapi_hotel_service import search_liteapi_hotels
 
 """
 Temp backend mock service for travel planning.
@@ -78,11 +79,27 @@ def search_flights(origin: str, destination: str, departure_date: str, adults: i
 
 def search_hotels(city: str, check_in_date: str, check_out_date: str, adults: int):
     """
-    Returns mock hotel results from backend
-    Later:
-     - Replace logic with LiteAPI hotel search.
-     - Keep returned field names stable for frontend.
+    Searches hotels for the Travel Planning page.
+
+    Current:
+    - Tries LiteAPI first.
+    - Falls back to backend mock hotel data if LiteAPI fails.
+
+    This keeps the Orbital demo reliable even if the external API is down.
     """
+
+    try:
+        return search_liteapi_hotels(
+            city=city,
+            check_in_date=check_in_date,
+            check_out_date=check_out_date,
+            adults=adults,
+        )
+    except Exception as error:
+        # Fallback is intentional for demo reliability.
+        # This also helps during development if LiteAPI token/config is wrong.
+        print("LiteAPI hotel search failed. Falling back to mock data:", error)
+
     mock_hotels = [
         {
             "id": "hotel-1",
@@ -116,6 +133,5 @@ def search_hotels(city: str, check_in_date: str, check_out_date: str, adults: in
         if city.lower() in search_text:
             filtered_hotels.append(hotel)
 
-    # Return cheapest first.
     return sorted(filtered_hotels, key=lambda hotel: hotel["price"])
 
