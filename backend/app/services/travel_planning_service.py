@@ -1,3 +1,5 @@
+from app.services.duffel_flight_service import search_duffel_flights
+
 """
 Temp backend mock service for travel planning.
 - Let frontend call FastAPI instead of local mock data
@@ -7,12 +9,26 @@ Temp backend mock service for travel planning.
 
 def search_flights(origin: str, destination: str, departure_date: str, adults: int):
     """
-    Returns mock dlight results from backend
-    Later:
-     - replace logic with Duffel flight offer search.
-     - Keep returned field names the same so the frontend does not need major changes.
+    Searches flights for the Travel Planning page.
+
+    Current:
+    - Tries Duffel first.
+    - Falls back to backend mock data if Duffel fails.
+
+    This keeps the Orbital demo reliable even if the external API is down.
     """
 
+    try:
+        return search_duffel_flights(
+            origin=origin,
+            destination=destination,
+            departure_date=departure_date,
+            adults=adults,
+        )
+    except Exception as error:
+        # Fallback is intentional for demo use.
+        # This also helps during development if Duffel token/config is wrong.
+        print("Duffel flight search failed. Falling back to mock data:", error)
 
     mock_flights = [
         {
@@ -41,7 +57,6 @@ def search_flights(origin: str, destination: str, departure_date: str, adults: i
         },
     ]
 
-    # Basic filtering so query parameters visibly affect the response.
     filtered_flights = []
 
     for flight in mock_flights:
@@ -49,14 +64,17 @@ def search_flights(origin: str, destination: str, departure_date: str, adults: i
         city_text = flight["city"].lower()
         country_text = flight["country"].lower()
 
-        if (origin.lower() in route_text and 
-            (destination.lower() in route_text 
-             or destination.lower() in city_text
-             or destination.lower() in country_text)
-        ): filtered_flights.append(flight)
+        if (
+            origin.lower() in route_text
+            and (
+                destination.lower() in route_text
+                or destination.lower() in city_text
+                or destination.lower() in country_text
+            )
+        ):
+            filtered_flights.append(flight)
 
-    # Return cheapest flight first.
-    return sorted(filtered_flights, key = lambda flight: flight["price"])
+    return sorted(filtered_flights, key=lambda flight: flight["price"])
 
 def search_hotels(city: str, check_in_date: str, check_out_date: str, adults: int):
     """
