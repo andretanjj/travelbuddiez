@@ -2,6 +2,8 @@ from fastapi import APIRouter, Query
 
 from app.services.travel_planning_service import search_flights, search_hotels
 
+from app.services.travel_place_service import search_travel_places
+
 
 router = APIRouter(
     prefix="/travel",
@@ -64,4 +66,24 @@ def get_hotel_results(
 
     return {
         "results": hotels,
+    }
+
+
+@router.get("/places")
+def get_travel_place_suggestions(
+    query: str = Query(..., min_length=2, description="Search text, e.g. Sing or Tokyo"),
+    mode: str = Query("flight", description="Autocomplete mode: flight or hotel"),
+):
+    """
+    Returns Trip.com-style travel suggestions for autocomplete.
+
+    mode=flight:
+    - Prefer cities and airports.
+
+    mode=hotel:
+    - Prefer cities, areas, stations, and landmarks.
+    """
+
+    return {
+        "results": search_travel_places(query=query, mode=mode),
     }
