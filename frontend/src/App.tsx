@@ -8,6 +8,8 @@ import TravelPlanningPage from "./pages/TravelPlanningPage";
 import LoginPage from "./pages/LoginPage";
 import RegistrationPage from "./pages/RegistrationPage";
 import { AuthProvider } from "./context/AuthContext";
+import AiAssistantPage from "./pages/AiAssistantPage";
+import FloatingAiButton from "./components/FloatingAiButton";
 
 
 function App() {
@@ -27,7 +29,10 @@ function App() {
             path="/destinations/:countryCode"
             element={<DestinationDashboardPage />}
           />
+          <Route path="/ai-assistant" element={<AiAssistantPage />} />
         </Routes>
+
+        <FloatingAiButton />
       </AuthProvider>
     </BrowserRouter>
   );
