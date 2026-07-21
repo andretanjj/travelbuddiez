@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Plane, Hotel, Search, MapPin } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
+import { saveFlight, saveHotel } from "../services/savedTravelApi";
 
 import {
   searchFlights,
@@ -62,6 +64,11 @@ function TravelPlanningPage() {
 
   const targetPrice = Number(alertPrice);
   const hotelTargetPrice = Number(hotelAlertPrice);
+
+  // Used for saved travels
+  const { user } = useAuth();
+  const [saveMessage, setSaveMessage] = useState("");
+  const [savingItemId, setSavingItemId] = useState<string | null>(null);
 
   const activeSearchText =
     activeSuggestionTarget === "origin"
@@ -214,6 +221,89 @@ function TravelPlanningPage() {
 
     setSuggestions([]);
     setActiveSuggestionTarget(null);
+  }
+
+  async function handleSaveFlight(flight: FlightResult) {
+    /*
+      Guests can search, but only logged-in users can save.
+      Saved flight stores a snapshot of the selected result.
+    */
+
+    if (user === null) {
+      setSaveMessage("Please log in to save this flight.");
+      return;
+    }
+
+    setSaveMessage("");
+    setSavingItemId(flight.id);
+
+    try {
+      await saveFlight({
+        origin_code: selectedOriginCode,
+        origin_name: originInput,
+        destination_code: selectedDestinationCode,
+        destination_name: destinationInput,
+        departure_date: flight.departureDate,
+        return_date: null,
+        price: flight.price,
+        currency: flight.currency,
+        airline: flight.airline,
+        duration: flight.duration,
+        stops: flight.stops,
+        provider: "duffel",
+      });
+
+      setSaveMessage("Flight saved successfully.");
+    } catch (error) {
+      if (error instanceof Error) {
+        setSaveMessage(error.message);
+      } else {
+        setSaveMessage("Unable to save flight.");
+      }
+    } finally {
+      setSavingItemId(null);
+    }
+  }
+  
+  async function handleSaveHotel(hotel: HotelResult) {
+    /*
+      Guests can search, but only logged-in users can save.
+      Saved hotel stores the total stay price snapshot.
+    */
+
+    if (user === null) {
+      setSaveMessage("Please log in to save this hotel.");
+      return;
+    }
+
+    setSaveMessage("");
+    setSavingItemId(hotel.id);
+
+    try {
+      await saveHotel({
+        destination_code: selectedHotelCode,
+        destination_name: hotelDestinationInput,
+        hotel_name: hotel.name,
+        city: hotel.city,
+        country: hotel.country,
+        rating: hotel.rating,
+        price: hotel.price,
+        currency: hotel.currency,
+        check_in_date: hotel.checkInDate,
+        check_out_date: hotel.checkOutDate,
+        provider: "liteapi",
+      });
+
+      setSaveMessage("Hotel saved successfully.");
+    } catch (error) {
+      if (error instanceof Error) {
+        setSaveMessage(error.message);
+      } else {
+        setSaveMessage("Unable to save hotel.");
+      }
+    } finally {
+      setSavingItemId(null);
+    }
   }
 
   function renderSuggestions(target: SuggestionTarget) {
@@ -485,6 +575,12 @@ function TravelPlanningPage() {
           </div>
         )}
 
+        {saveMessage && (
+          <div className="mb-6 rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-sm text-amber-200">
+            {saveMessage}
+          </div>
+        )}
+
         {/* Flight price alert */}
         {activeTab === "flights" && (
           <div className="mb-8 rounded-xl border border-slate-800 bg-slate-900 p-4">
@@ -580,6 +676,15 @@ function TravelPlanningPage() {
                       <p className="text-2xl font-bold text-amber-500">
                         {flight.currency} {flight.price}
                       </p>
+
+                      <button
+                        type="button"
+                        onClick={() => handleSaveFlight(flight)}
+                        disabled={savingItemId === flight.id}
+                        className="mt-3 rounded-lg border border-amber-500 px-4 py-2 text-sm font-semibold text-amber-400 transition hover:bg-amber-500 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {savingItemId === flight.id ? "Saving..." : "Save flight"}
+                      </button>
                     </div>
                   </div>
                 );
@@ -646,6 +751,15 @@ function TravelPlanningPage() {
                       <p className="text-2xl font-bold text-amber-500">
                         {hotel.currency} {hotel.price}
                       </p>
+
+                      <button
+                        type="button"
+                        onClick={() => handleSaveHotel(hotel)}
+                        disabled={savingItemId === hotel.id}
+                        className="mt-3 rounded-lg border border-amber-500 px-4 py-2 text-sm font-semibold text-amber-400 transition hover:bg-amber-500 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {savingItemId === hotel.id ? "Saving..." : "Save hotel"}
+                      </button>
                     </div>
                   </div>
                 );

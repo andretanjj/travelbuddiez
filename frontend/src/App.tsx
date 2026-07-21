@@ -5,6 +5,7 @@ import DestinationDashboardPage from "./pages/DestinationDashboardPage.tsx";
 import ComingSoon from "./pages/ComingSoon.tsx";
 import Navbar from "./components/Navbar.tsx";
 import TravelPlanningPage from "./pages/TravelPlanningPage";
+import SavedTravelPage from "./pages/SavedTravelPage";
 import LoginPage from "./pages/LoginPage";
 import RegistrationPage from "./pages/RegistrationPage";
 import { AuthProvider } from "./context/AuthContext";
@@ -19,6 +20,7 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/map" element={<ExploreMapPage />} />
           <Route path="/planning" element={<TravelPlanningPage />} />
+          <Route path="/saved-travel" element={<SavedTravelPage />} />
           <Route path="/about" element={<ComingSoon />} />
           {/* Authentication pages */}
           <Route path="/login" element={<LoginPage />} />
