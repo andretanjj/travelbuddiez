@@ -20,16 +20,21 @@ function TravelPlanningPage() {
   const [activeTab, setActiveTab] = useState<ActiveTravelTab>("flights");
 
   // Flight search form states.
-  // The user sees normal place names, but selected suggestions store travel codes like SIN, HND, TYO.
-  const [origin, setOrigin] = useState("SIN");
-  const [destination, setDestination] = useState("HND");
-  const [departureDate, setDepartureDate] = useState("2026-08-20");
+  // Input text is what the user sees.
+  // Selected code is what we send to Duffel.
+  const [originInput, setOriginInput] = useState("");
+  const [destinationInput, setDestinationInput] = useState("");
+  const [selectedOriginCode, setSelectedOriginCode] = useState("");
+  const [selectedDestinationCode, setSelectedDestinationCode] = useState("");
+  const [departureDate, setDepartureDate] = useState("");
 
   // Hotel search form states.
-  // LiteAPI currently searches by selected destination code such as TYO or SIN.
-  const [hotelCity, setHotelCity] = useState("TYO");
-  const [checkInDate, setCheckInDate] = useState("2026-08-20");
-  const [checkOutDate, setCheckOutDate] = useState("2026-08-25");
+  // Input text is what the user sees.
+  // Selected code is what we send to LiteAPI.
+  const [hotelDestinationInput, setHotelDestinationInput] = useState("");
+  const [selectedHotelCode, setSelectedHotelCode] = useState("");
+  const [checkInDate, setCheckInDate] = useState("");
+  const [checkOutDate, setCheckOutDate] = useState("");
 
   // Shared search input for flights and hotels.
   const [adults, setAdults] = useState(1);
@@ -60,11 +65,11 @@ function TravelPlanningPage() {
 
   const activeSearchText =
     activeSuggestionTarget === "origin"
-      ? origin
+      ? originInput
       : activeSuggestionTarget === "destination"
-        ? destination
+        ? destinationInput
         : activeSuggestionTarget === "hotel"
-          ? hotelCity
+          ? hotelDestinationInput
           : "";
 
   useEffect(() => {
@@ -123,21 +128,42 @@ function TravelPlanningPage() {
 
     try {
       if (activeTab === "flights") {
-        // Calls backend GET /travel/flights/search.
-        // Backend then tries Duffel first and falls back to mock data if needed.
+        if (!selectedOriginCode || !selectedDestinationCode) {
+          setErrorMessage("Please choose both flight locations from the dropdown suggestions.");
+          return;
+        }
+
+        if (!departureDate) {
+          setErrorMessage("Please choose a departure date.");
+          return;
+        }
+
         const flightResponse = await searchFlights({
-          origin,
-          destination,
+          origin: selectedOriginCode,
+          destination: selectedDestinationCode,
           departureDate,
           adults,
         });
 
         setFlights(flightResponse.results);
       } else {
-        // Calls backend GET /travel/hotels/search.
-        // Backend then tries LiteAPI / Nuitee first and falls back to mock data if needed.
+        if (!selectedHotelCode) {
+          setErrorMessage("Please choose a hotel destination from the dropdown suggestions.");
+          return;
+        }
+
+        if (!checkInDate || !checkOutDate) {
+          setErrorMessage("Please choose both check-in and check-out dates.");
+          return;
+        }
+
+        if (checkOutDate <= checkInDate) {
+          setErrorMessage("Check-out date must be after check-in date.");
+          return;
+        }
+
         const hotelResponse = await searchHotels({
-          city: hotelCity,
+          city: selectedHotelCode,
           checkInDate,
           checkOutDate,
           adults,
@@ -157,22 +183,33 @@ function TravelPlanningPage() {
   }
 
   function handleSuggestionSelect(suggestion: TravelPlaceSuggestion) {
-    // Use provider code when available because Duffel/LiteAPI need codes like SIN, HND, TYO.
-    // Fallback to name so the UI still works for suggestions without a code.
-    const selectedValue = suggestion.code || suggestion.name;
+    /*
+      The user should see the readable place name.
+      The backend should receive the hidden travel code.
+
+      Example:
+      User sees: Bugis
+      App sends: SIN
+    */
+
+    const displayValue = suggestion.name;
+    const hiddenCode = suggestion.code || suggestion.name;
 
     justSelectedSuggestionRef.current = true;
 
     if (activeSuggestionTarget === "origin") {
-      setOrigin(selectedValue);
+      setOriginInput(displayValue);
+      setSelectedOriginCode(hiddenCode);
     }
 
     if (activeSuggestionTarget === "destination") {
-      setDestination(selectedValue);
+      setDestinationInput(displayValue);
+      setSelectedDestinationCode(hiddenCode);
     }
 
     if (activeSuggestionTarget === "hotel") {
-      setHotelCity(selectedValue);
+      setHotelDestinationInput(displayValue);
+      setSelectedHotelCode(hiddenCode);
     }
 
     setSuggestions([]);
@@ -281,14 +318,18 @@ function TravelPlanningPage() {
 
                   <input
                     type="text"
-                    value={origin}
+                    value={originInput}
                     onFocus={() => setActiveSuggestionTarget("origin")}
                     onChange={(event) => {
-                      setOrigin(event.target.value);
+                      setOriginInput(event.target.value);
+
+                      // User changed the text manually, so previous selected code is no longer trusted.
+                      setSelectedOriginCode("");
+
                       setActiveSuggestionTarget("origin");
                     }}
                     required
-                    placeholder="e.g. Singapore"
+                    placeholder="Leaving from"
                     className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-amber-500"
                   />
 
@@ -302,14 +343,15 @@ function TravelPlanningPage() {
 
                   <input
                     type="text"
-                    value={destination}
+                    value={destinationInput}
                     onFocus={() => setActiveSuggestionTarget("destination")}
                     onChange={(event) => {
-                      setDestination(event.target.value);
+                      setDestinationInput(event.target.value);
+                      setSelectedDestinationCode("");
                       setActiveSuggestionTarget("destination");
                     }}
                     required
-                    placeholder="e.g. Tokyo"
+                    placeholder="Going to"
                     className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-amber-500"
                   />
 
@@ -361,14 +403,15 @@ function TravelPlanningPage() {
 
                   <input
                     type="text"
-                    value={hotelCity}
+                    value={hotelDestinationInput}
                     onFocus={() => setActiveSuggestionTarget("hotel")}
                     onChange={(event) => {
-                      setHotelCity(event.target.value);
+                      setHotelDestinationInput(event.target.value);
+                      setSelectedHotelCode("");
                       setActiveSuggestionTarget("hotel");
                     }}
                     required
-                    placeholder="e.g. Tokyo"
+                    placeholder="Where to?"
                     className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-amber-500"
                   />
 
