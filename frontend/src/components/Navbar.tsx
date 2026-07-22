@@ -62,6 +62,10 @@ function Navbar() {
                     Travel Planning
                 </NavLink>
 
+                <NavLink className={navLink} to="/saved-travel">
+                    Saved Travel
+                </NavLink>
+
                 <NavLink className={navLink} to="/about">
                     About
                 </NavLink>
