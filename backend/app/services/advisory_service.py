@@ -119,26 +119,17 @@ def extract_country_name_from_title(title: str):
 
 
 def fetch_us_travel_advisories():
-    """
-    Fetches US travel advisories and stores each advisory using two possible keys:
-    1. The advisory category code, e.g. "sg", "id", "ja"
-    2. The country name from the title, e.g. "singapore", "indonesia", "japan"
-
-    This avoids needing manual overrides for cases like Japan:
-    ISO code is "jp", but the advisory feed category is "ja".
-
-    Important:
-    GET /destinations reads cached DB data.
-    PUT /destinations/map-scores/update-all refreshes advisory data manually.
-    """
-
-    response = requests.get(TRAVEL_ADVISORIES_URL, timeout=10)
-
-    # debug
-    #print("US advisory status:", response.status_code)
+    response = requests.get(
+        TRAVEL_ADVISORIES_URL,
+        timeout=10,
+    )
 
     if response.status_code != 200:
-        print("US advisory API error:", response.status_code, response.text)
+        print(
+            "US advisory API error:",
+            response.status_code,
+            response.text,
+        )
         return {}
 
     advisories = response.json()
@@ -146,70 +137,47 @@ def fetch_us_travel_advisories():
 
     for advisory in advisories:
         title = advisory.get("Title", "")
-        summary = advisory.get("Summary", "")
-
-        country_code = extract_country_code(advisory)
         country_name = extract_country_name_from_title(title)
         advisory_level = extract_advisory_level(title)
 
-        if advisory_level is None:
+        if country_name is None or advisory_level is None:
             continue
 
-        # Get map-related data from the advisory level
         map_data = ADVISORY_LEVEL_TO_MAP_DATA.get(
             advisory_level,
             get_default_map_data(),
         )
 
-        # Create a fuller advisory object.
-        advisory_data = {
+        advisory_map[country_name] = {
             "mapScore": map_data["mapScore"],
             "riskLevel": map_data["riskLevel"],
             "condition": map_data["condition"],
             "advisoryLevel": advisory_level,
-            "advisory": title or "No advisory summary available.",
+            "advisory": (
+                title
+                or "No advisory summary available."
+            ),
         }
-
-        # Store by advisory code, e.g. "sg", "id", "ja".
-        if country_code is not None:
-            advisory_map[country_code] = advisory_data
-
-        # Also store by country name, e.g. "singapore", "indonesia", "japan".
-        if country_name is not None:
-            advisory_map[country_name] = advisory_data
-
-    # debug
-    # print("Loaded US advisory keys:", len(advisory_map))
-    # print("US advisory map sample keys:", list(advisory_map.keys())[:20])
 
     return advisory_map
 
 
 def get_advisory_data_for_destination(destination, advisory_map):
-    """
-    Gets full advisory data for one destination.
+    country_name = (
+        destination.get("country")
+        or destination.get("country_name")
+        or ""
+    )
 
-    First tries matching by the 2-letter newsCode.
-    If that fails, it tries matching by country name.
-    """
+    country_name = country_name.strip().lower()
 
-    news_code = destination.get("newsCode")
-    country_name = destination.get("country", "").lower()
+    if not country_name:
+        return get_default_map_data()
 
-    if news_code:
-        advisory_data = advisory_map.get(news_code.lower())
-
-        if advisory_data is not None:
-            return advisory_data
-
-    if country_name:
-        advisory_data = advisory_map.get(country_name)
-
-        if advisory_data is not None:
-            return advisory_data
-
-    return get_default_map_data()
-
+    return advisory_map.get(
+        country_name,
+        get_default_map_data(),
+    )
 
 def get_map_data_for_destination(destination, advisory_map):
     """
