@@ -132,6 +132,13 @@ def search_duffel_flights(origin: str, destination: str, departure_date: str, ad
     normalised_offers = []
 
     for offer in offers[:10]:
-        normalised_offers.append(normalise_duffel_offer(offer))
+        normalised_offer = normalise_duffel_offer(
+            offer
+        )
+
+        if normalised_offer["price"] > 0:
+            normalised_offers.append(
+                normalised_offer
+            )
 
     return sorted(normalised_offers, key=lambda flight: flight["price"])

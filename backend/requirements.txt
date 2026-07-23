@@ -9,3 +9,6 @@ PyJWT
 pwdlib[argon2]
 # Required because OAuth2PasswordRequestForm uses form data.
 python-multipart
+# pytest
+pytest
+httpx
