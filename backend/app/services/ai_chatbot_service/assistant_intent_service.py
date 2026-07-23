@@ -1,13 +1,5 @@
 from typing import Literal
-
-AssistantIntent = Literal[
-    "destination_recommendation",
-    "travel_advice",
-    "destination_question",
-    "irrelevant",
-    "prompt_injection",
-]
-
+from app.schemas.assistant_schema import AssistantIntent
 
 PROMPT_INJECTION_PHRASES = {
     "ignore previous instructions",
@@ -65,6 +57,48 @@ DESTINATION_QUESTION_KEYWORDS = {
     "better",
 }
 
+FLIGHT_PRICE_PHRASES = {
+    "flight",
+    "flights",
+    "airfare",
+    "plane ticket",
+    "flight price",
+    "flight prices",
+    "cheapest flight",
+    "cost to fly",
+}
+
+HOTEL_PRICE_PHRASES = {
+    "hotel",
+    "hotels",
+    "accommodation",
+    "hotel price",
+    "hotel prices",
+    "room price",
+    "cheapest hotel",
+    "cost to stay",
+}
+
+SAVED_FLIGHT_PHRASES = {
+    "saved flight",
+    "my saved flight",
+    "flight i saved",
+    "saved airfare",
+    "has my flight price changed",
+    "did my flight price drop",
+    "is my saved flight still the cheapest",
+}
+
+SAVED_HOTEL_PHRASES = {
+    "saved hotel",
+    "my saved hotel",
+    "hotel i saved",
+    "saved accommodation",
+    "has my hotel price changed",
+    "did my hotel price drop",
+    "is my saved hotel still the cheapest",
+}
+
 
 def classify_assistant_intent(
     message: str,
@@ -81,6 +115,37 @@ def classify_assistant_intent(
 
     if any(
         phrase in text
+        for phrase in SAVED_FLIGHT_PHRASES
+    ):
+        return "saved_flight_question"
+
+    if any(
+        phrase in text
+        for phrase in SAVED_HOTEL_PHRASES
+    ):
+        return "saved_hotel_question"
+
+    mentions_flight = any(
+        phrase in text
+        for phrase in FLIGHT_PRICE_PHRASES
+    )
+
+    mentions_hotel = any(
+        phrase in text
+        for phrase in HOTEL_PRICE_PHRASES
+    )
+
+    if mentions_flight and mentions_hotel:
+        return "flight_and_hotel_price_question"
+
+    if mentions_flight:
+        return "flight_price_question"
+
+    if mentions_hotel:
+        return "hotel_price_question"
+
+    if any(
+        phrase in text
         for phrase in RECOMMENDATION_PHRASES
     ):
         return "destination_recommendation"
@@ -90,12 +155,6 @@ def classify_assistant_intent(
         for keyword in PLANNING_KEYWORDS
     ):
         return "travel_advice"
-
-    if has_destination and any(
-        keyword in text
-        for keyword in DESTINATION_QUESTION_KEYWORDS
-    ):
-        return "destination_question"
 
     if has_destination:
         return "destination_question"

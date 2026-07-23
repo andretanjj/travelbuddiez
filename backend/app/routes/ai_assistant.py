@@ -1,5 +1,5 @@
 import os
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.schemas.assistant_schema import (
     AssistantRequest,
@@ -12,7 +12,19 @@ from app.services.ai_chatbot_service.destination_context_service import (
     get_destination_context,
     get_recommendation_candidates,
 )
-from app.data.mock.mock_travel_prices import add_mock_prices
+# from app.data.mock.mock_travel_prices import add_mock_prices
+from app.services.ai_chatbot_service.assistant_price_service import (
+    resolve_flight_price_data,
+    resolve_hotel_price_data,
+)
+from app.services.saved_travel_service import (
+    get_saved_flights_for_user,
+    get_saved_hotels_for_user,
+    refresh_saved_flight_price,
+    refresh_saved_hotel_price,
+)
+
+from app.services.auth_service import get_current_active_user
 
 router = APIRouter(
     prefix="/assistant",
@@ -30,8 +42,13 @@ USE_MOCK_TRAVEL_PRICES = (
 )
 def chat_with_assistant(
     request: AssistantRequest,
+    current_user=Depends(get_current_active_user)
 ) -> AssistantResponse:
     try:
+        print(
+            "Assistant request from:", 
+            current_user.username,
+        )
         # Use the current dashboard destination when the question does not
         # explicitly name a country.
         print("Before destination detection")
@@ -51,6 +68,13 @@ def chat_with_assistant(
             has_destination=bool(destination_codes),
             has_preferences=request.travel_preferences is not None,
         )
+
+        flight_price_data = None
+        hotel_price_data = None
+        saved_item_data = None
+        missing_fields: list[str] = []
+
+        preferences = request.travel_preferences
 
         if intent == "prompt_injection":
             return AssistantResponse(
@@ -78,9 +102,146 @@ def chat_with_assistant(
                 data_last_updated=None,
             )
 
+        destination_data: list[dict] = []
+        saved_item_data = None
+        flight_price_data = None
+        hotel_price_data = None
+        missing_fields: list[str] = []
+
+        # Handle questions about the user's saved flights.
+        if intent == "saved_flight_question":
+            if request.saved_flight_id is not None:
+                saved_item_data = refresh_saved_flight_price(
+                    username=current_user.username,
+                    saved_flight_id=request.saved_flight_id,
+                )
+            else:
+                saved_item_data = get_saved_flights_for_user(
+                    username=current_user.username,
+                )
+
+        # Handle questions about the user's saved hotels.
+        elif intent == "saved_hotel_question":
+            if request.saved_hotel_id is not None:
+                saved_item_data = refresh_saved_hotel_price(
+                    username=current_user.username,
+                    saved_hotel_id=request.saved_hotel_id,
+                )
+            else:
+                saved_item_data = get_saved_hotels_for_user(
+                    username=current_user.username,
+                )
+
+        if intent in {
+            "flight_price_question",
+            "flight_and_hotel_price_question",
+        }:
+            flight_missing: list[str] = []
+
+            if preferences is None:
+                flight_missing.extend([
+                    "origin",
+                    "departure_date",
+                    "travellers",
+                ])
+            else:
+                if not preferences.origin:
+                    flight_missing.append("origin")
+
+                if not preferences.departure_date:
+                    flight_missing.append(
+                        "departure_date"
+                    )
+
+                if not preferences.travellers:
+                    flight_missing.append(
+                        "travellers"
+                    )
+
+            if not destination_codes:
+                flight_missing.append("destination")
+
+            missing_fields.extend(flight_missing)
+
+            if not flight_missing:
+                flight_price_data = resolve_flight_price_data(
+                    username=current_user.username,
+                    origin=preferences.origin,
+                    destination=destination_codes[0],
+                    departure_date=str(
+                        preferences.departure_date
+                    ),
+                    adults=preferences.travellers,
+                )
+
+        # New or general hotel-price search
+        if intent in {
+            "hotel_price_question",
+            "flight_and_hotel_price_question",
+        }:
+            hotel_missing: list[str] = []
+
+            if preferences is None:
+                hotel_missing.extend([
+                    "check_in_date",
+                    "check_out_date",
+                    "travellers",
+                ])
+            else:
+                if not preferences.check_in_date:
+                    hotel_missing.append(
+                        "check_in_date"
+                    )
+
+                if not preferences.check_out_date:
+                    hotel_missing.append(
+                        "check_out_date"
+                    )
+
+                if not preferences.travellers:
+                    hotel_missing.append(
+                        "travellers"
+                    )
+
+            if not destination_codes:
+                hotel_missing.append("destination")
+
+            missing_fields.extend(hotel_missing)
+
+            if not hotel_missing:
+                hotel_price_data = resolve_hotel_price_data(
+                    username=current_user.username,
+                    destination=destination_codes[0],
+                    check_in_date=str(
+                        preferences.check_in_date
+                    ),
+                    check_out_date=str(
+                        preferences.check_out_date
+                    ),
+                    adults=preferences.travellers,
+                )
+
+        missing_fields = list(
+            dict.fromkeys(missing_fields)
+        )
+
+        if missing_fields:
+            return AssistantResponse(
+                reply=build_missing_information_reply(
+                    missing_fields
+                ),
+                intent="missing_information",
+                destinations_used=destination_codes,
+                missing_fields=missing_fields,
+                data_last_updated=None,
+            )
+
+        # Destination context
         if intent == "destination_recommendation":
-            destination_data = get_recommendation_candidates(
-                limit=10
+            destination_data = (
+                get_recommendation_candidates(
+                    limit=10
+                )
             )
 
         elif destination_codes:
@@ -88,19 +249,17 @@ def chat_with_assistant(
                 destination_codes
             )
 
-        else:
-            # General advice such as:
-            # "How should I divide my travel budget?"
-            destination_data = []
-
-        destination_data = add_mock_prices(destination_data)
-
         reply = generate_assistant_reply(
             user_message=request.message,
             destination_data=destination_data,
-            conversation_history=request.conversation_history,
+            conversation_history=(
+                request.conversation_history
+            ),
             travel_preferences=request.travel_preferences,
             intent=intent,
+            saved_item_data=saved_item_data,
+            flight_price_data=flight_price_data,
+            hotel_price_data=hotel_price_data,
         )
 
         used_codes = [
@@ -114,7 +273,11 @@ def chat_with_assistant(
             if destination.get("last_updated")
         ]
 
-        latest_update = max(update_times) if update_times else None
+        latest_update = (
+            max(update_times)
+            if update_times
+            else None
+        )
 
         return AssistantResponse(
             reply=reply,
@@ -124,8 +287,15 @@ def chat_with_assistant(
             data_last_updated=latest_update,
         )
 
+    except HTTPException:
+        raise
+
     except Exception as error:
-        print(f"Travel assistant error: {error}")
+        print(
+            "Travel assistant error:",
+            type(error).__name__,
+            error,
+        )
 
         error_text = str(error).casefold()
 
@@ -149,3 +319,34 @@ def chat_with_assistant(
                 "unavailable."
             ),
         )
+
+
+def build_missing_information_reply(
+    missing_fields: list[str],
+) -> str:
+    labels = {
+        "origin": "departure airport",
+        "destination": "destination",
+        "departure_date": "departure date",
+        "travellers": "number of travellers",
+        "check_in_date": "hotel check-in date",
+        "check_out_date": "hotel check-out date",
+    }
+
+    readable_fields = [
+        labels.get(field, field)
+        for field in missing_fields
+    ]
+
+    if len(readable_fields) == 1:
+        joined_fields = readable_fields[0]
+    else:
+        joined_fields = (
+            ", ".join(readable_fields[:-1])
+            + f" and {readable_fields[-1]}"
+        )
+
+    return (
+        "To search current flight or hotel prices, "
+        f"please provide your {joined_fields}."
+    )

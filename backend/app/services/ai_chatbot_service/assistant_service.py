@@ -88,6 +88,18 @@ ITINERARIES
 5. Do not claim that an attraction is open or available unless that
    information was supplied.
 
+SAVED FLIGHTS AND HOTELS
+
+1. Saved flight and hotel data belongs to the authenticated user.
+2. Only discuss saved items included in the supplied saved-item data.
+3. Do not claim that an item was saved unless the supplied data confirms it.
+4. The saved_price is the price when the user saved the item.
+5. The current_price is the latest refreshed comparable price.
+6. Unless the exact airline, flight or hotel matches, describe the refreshed
+   result as the cheapest comparable option.
+7. Do not describe a comparable result as the exact updated price of the
+   originally saved item.
+
 RESPONSE STYLE
 1. Answer the user's actual question directly.
 2. Use headings or bullet points when they make plans easier to read.
@@ -165,20 +177,65 @@ def generate_assistant_reply(
     conversation_history: list[ChatMessage],
     travel_preferences: TravelPreferences | None,
     intent: str,
+    saved_item_data: Any = None,
+    flight_price_data: Any = None,
+    hotel_price_data: Any = None,
 ) -> str:
     destination_context = format_destination_data(destination_data)
     history_context = format_conversation_history(conversation_history)
     preferences_context = format_travel_preferences(travel_preferences)
     task_instruction = get_task_instruction(intent)
 
+    saved_item_context = format_saved_item_data(
+        saved_item_data
+    )
+
+    flight_price_context = (
+        json.dumps(
+            flight_price_data,
+            indent=2,
+            ensure_ascii=False,
+            default=str,
+        )
+        if flight_price_data
+        else "No flight-price data was retrieved."
+    )
+
+    hotel_price_context = (
+        json.dumps(
+            hotel_price_data,
+            indent=2,
+            ensure_ascii=False,
+            default=str,
+        )
+        if hotel_price_data
+        else "No hotel-price data was retrieved."
+    )
+
     user_prompt = f"""
 <previous_conversation>
 {history_context}
 </previous_conversation>
 
+<travel_preferences>
+{preferences_context}
+</travel_preferences>
+
 <travelbuddiez_destination_data>
 {destination_context}
 </travelbuddiez_destination_data>
+
+<saved_travel_item_data>
+{saved_item_context}
+</saved_travel_item_data>
+
+<flight_price_data>
+{flight_price_context}
+</flight_price_data>
+
+<hotel_price_data>
+{hotel_price_context}
+</hotel_price_data>
 
 <request_intent>
 {intent}
@@ -237,6 +294,19 @@ def format_travel_preferences(
 
     return json.dumps(
         data,
+        indent=2,
+        ensure_ascii=False,
+        default=str,
+    )
+
+def format_saved_item_data(
+    saved_item_data: Any,
+) -> str:
+    if not saved_item_data:
+        return "No saved flight or hotel data was retrieved."
+
+    return json.dumps(
+        saved_item_data,
         indent=2,
         ensure_ascii=False,
         default=str,

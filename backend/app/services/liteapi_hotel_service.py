@@ -214,19 +214,24 @@ def search_liteapi_hotels(city: str, check_in_date: str, check_out_date: str, ad
     for hotel_rate in hotel_rates[:10]:
         hotel_id = hotel_rate.get("hotelId")
 
-        # If hotelId is missing, metadata cannot be fetched.
         hotel_details = None
 
         if hotel_id:
-            hotel_details = fetch_liteapi_hotel_details(hotel_id)
-
-        normalised_hotels.append(
-            normalise_liteapi_hotel(
-                hotel_rate=hotel_rate,
-                hotel_details=hotel_details,
-                check_in_date=check_in_date,
-                check_out_date=check_out_date,
+            hotel_details = fetch_liteapi_hotel_details(
+                str(hotel_id)
             )
+
+        normalised_hotel = normalise_liteapi_hotel(
+            hotel_rate=hotel_rate,
+            hotel_details=hotel_details,
+            check_in_date=check_in_date,
+            check_out_date=check_out_date,
         )
+
+        # Do not include missing or zero-value prices.
+        if normalised_hotel["price"] > 0:
+            normalised_hotels.append(
+                normalised_hotel
+            )
 
     return sorted(normalised_hotels, key=lambda hotel: hotel["price"])
