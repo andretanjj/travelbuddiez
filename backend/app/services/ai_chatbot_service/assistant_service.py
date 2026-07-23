@@ -4,7 +4,6 @@ from typing import Any
 
 from dotenv import load_dotenv
 from google import genai
-from google.genai import types
 
 from app.schemas.assistant_schema import (
     ChatMessage,
@@ -13,7 +12,7 @@ from app.schemas.assistant_schema import (
 
 load_dotenv()
 
-api_key = os.getenv("GEMINI_CHATBOT_API_KEY")
+api_key = os.getenv("GEMINI_API_KEY")
 
 if not api_key:
     raise RuntimeError("GEMINI_CHATBOT_API_KEY is not configured.")

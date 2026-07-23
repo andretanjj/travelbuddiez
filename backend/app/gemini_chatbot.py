@@ -5,7 +5,7 @@ from google import genai
 
 load_dotenv()
 
-api_key = os.getenv("GEMINI_CHATBOT_API_KEY")
+api_key = os.getenv("GEMINI_API_KEY")
 model_name = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
 
 if not api_key:
