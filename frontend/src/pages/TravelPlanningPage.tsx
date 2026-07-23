@@ -9,6 +9,11 @@ import {
   searchTravelPlaces,
 } from "../services/travelApi";
 
+import {
+  createFlightPriceAlert,
+  createHotelPriceAlert,
+} from "../services/priceAlertApi";
+
 import type {
   ActiveTravelTab,
   FlightResult,
@@ -225,8 +230,10 @@ function TravelPlanningPage() {
 
   async function handleSaveFlight(flight: FlightResult) {
     /*
-      Guests can search, but only logged-in users can save.
-      Saved flight stores a snapshot of the selected result.
+      Saves the selected flight first.
+
+      When the user entered a valid target price, an alert is then linked
+      to the newly created saved_flights row.
     */
 
     if (user === null) {
@@ -234,11 +241,16 @@ function TravelPlanningPage() {
       return;
     }
 
+    if (alertPrice !== "" && targetPrice <= 0) {
+      setSaveMessage("Flight alert price must be greater than zero.");
+      return;
+    }
+
     setSaveMessage("");
     setSavingItemId(flight.id);
 
     try {
-      await saveFlight({
+      const savedFlight = await saveFlight({
         origin_code: selectedOriginCode,
         origin_name: originInput,
         destination_code: selectedDestinationCode,
@@ -253,7 +265,16 @@ function TravelPlanningPage() {
         provider: "duffel",
       });
 
-      setSaveMessage("Flight saved successfully.");
+      // Create an alert only when the user entered a target price.
+      if (targetPrice > 0) {
+        await createFlightPriceAlert(savedFlight.id, targetPrice);
+
+        setSaveMessage(
+          `Flight saved. Price alert set for ${flight.currency} ${targetPrice}.`
+        );
+      } else {
+        setSaveMessage("Flight saved successfully.");
+      }
     } catch (error) {
       if (error instanceof Error) {
         setSaveMessage(error.message);
@@ -266,45 +287,61 @@ function TravelPlanningPage() {
   }
   
   async function handleSaveHotel(hotel: HotelResult) {
-    /*
-      Guests can search, but only logged-in users can save.
-      Saved hotel stores the total stay price snapshot.
-    */
+  /*
+    Saves the selected hotel first.
 
-    if (user === null) {
-      setSaveMessage("Please log in to save this hotel.");
-      return;
-    }
+    When the user entered a valid target price, an alert is then linked
+    to the newly created saved_hotels row.
+  */
 
-    setSaveMessage("");
-    setSavingItemId(hotel.id);
-
-    try {
-      await saveHotel({
-        destination_code: selectedHotelCode,
-        destination_name: hotelDestinationInput,
-        hotel_name: hotel.name,
-        city: hotel.city,
-        country: hotel.country,
-        rating: hotel.rating,
-        price: hotel.price,
-        currency: hotel.currency,
-        check_in_date: hotel.checkInDate,
-        check_out_date: hotel.checkOutDate,
-        provider: "liteapi",
-      });
-
-      setSaveMessage("Hotel saved successfully.");
-    } catch (error) {
-      if (error instanceof Error) {
-        setSaveMessage(error.message);
-      } else {
-        setSaveMessage("Unable to save hotel.");
-      }
-    } finally {
-      setSavingItemId(null);
-    }
+  if (user === null) {
+    setSaveMessage("Please log in to save this hotel.");
+    return;
   }
+
+  if (hotelAlertPrice !== "" && hotelTargetPrice <= 0) {
+    setSaveMessage("Hotel alert price must be greater than zero.");
+    return;
+  }
+
+  setSaveMessage("");
+  setSavingItemId(hotel.id);
+
+  try {
+    const savedHotel = await saveHotel({
+      destination_code: selectedHotelCode,
+      destination_name: hotelDestinationInput,
+      hotel_name: hotel.name,
+      city: hotel.city,
+      country: hotel.country,
+      rating: hotel.rating,
+      price: hotel.price,
+      currency: hotel.currency,
+      check_in_date: hotel.checkInDate,
+      check_out_date: hotel.checkOutDate,
+      provider: "liteapi",
+    });
+
+    // Create an alert only when the user entered a target price.
+    if (hotelTargetPrice > 0) {
+      await createHotelPriceAlert(savedHotel.id, hotelTargetPrice);
+
+      setSaveMessage(
+        `Hotel saved. Price alert set for ${hotel.currency} ${hotelTargetPrice}.`
+      );
+    } else {
+      setSaveMessage("Hotel saved successfully.");
+    }
+  } catch (error) {
+    if (error instanceof Error) {
+      setSaveMessage(error.message);
+    } else {
+      setSaveMessage("Unable to save hotel.");
+    }
+  } finally {
+    setSavingItemId(null);
+  }
+}
 
   function renderSuggestions(target: SuggestionTarget) {
     if (activeSuggestionTarget !== target) {
@@ -597,8 +634,8 @@ function TravelPlanningPage() {
             />
 
             <p className="mt-2 text-xs text-slate-500">
-              Prototype feature: alerts are checked against the current search
-              results.
+              Enter a target price before saving a flight to create a persistent
+              price alert.
             </p>
           </div>
         )}
@@ -619,8 +656,8 @@ function TravelPlanningPage() {
             />
 
             <p className="mt-2 text-xs text-slate-500">
-              Prototype feature: alerts are checked against the current search
-              results.
+              Enter a target total stay price before saving a hotel to create a
+              persistent price alert.
             </p>
           </div>
         )}

@@ -1,0 +1,92 @@
+from typing import Annotated
+
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel, Field
+
+from app.services.auth_service import User, get_current_active_user
+from app.services.price_alert_service import (
+    create_flight_price_alert,
+    create_hotel_price_alert,
+    deactivate_price_alert,
+    get_price_alerts_for_user,
+)
+
+
+router = APIRouter(
+    prefix="/price-alerts",
+    tags=["price alerts"],
+)
+
+
+class CreatePriceAlertRequest(BaseModel):
+    """
+    Request body used when creating a flight or hotel alert.
+    """
+
+    target_price: float = Field(
+        ...,
+        gt=0,
+        description="Price threshold that triggers the alert",
+    )
+
+
+@router.post("/flights/{saved_flight_id}")
+def create_flight_alert(
+    saved_flight_id: int,
+    request: CreatePriceAlertRequest,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+):
+    """
+    Creates or updates a price alert for one saved flight.
+    """
+
+    return create_flight_price_alert(
+        username=current_user.username,
+        saved_flight_id=saved_flight_id,
+        target_price=request.target_price,
+    )
+
+
+@router.post("/hotels/{saved_hotel_id}")
+def create_hotel_alert(
+    saved_hotel_id: int,
+    request: CreatePriceAlertRequest,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+):
+    """
+    Creates or updates a price alert for one saved hotel.
+    """
+
+    return create_hotel_price_alert(
+        username=current_user.username,
+        saved_hotel_id=saved_hotel_id,
+        target_price=request.target_price,
+    )
+
+
+@router.get("")
+def get_price_alerts(
+    current_user: Annotated[User, Depends(get_current_active_user)],
+):
+    """
+    Lists all price alerts for the logged-in user.
+    """
+
+    return {
+        "results": get_price_alerts_for_user(current_user.username),
+    }
+
+
+@router.put("/{alert_id}/deactivate")
+def deactivate_alert(
+    alert_id: int,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+):
+    """
+    Disables one alert while preserving its database history.
+    """
+
+    return deactivate_price_alert(
+        username=current_user.username,
+        alert_id=alert_id,
+    )
