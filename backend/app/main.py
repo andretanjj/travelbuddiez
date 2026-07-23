@@ -15,6 +15,9 @@ from app.routes.travel_routes import router as travel_router
 # Saved travels
 from app.routes.saved_travel_routes import router as saved_travel_router
 
+# price-alert router.
+from app.routes.price_alert_routes import router as price_alert_router
+
 load_dotenv()
 
 ##debug
@@ -42,3 +45,4 @@ app.include_router(destinations_router)
 app.include_router(auth_router)
 app.include_router(travel_router)
 app.include_router(saved_travel_router)
+app.include_router(price_alert_router)

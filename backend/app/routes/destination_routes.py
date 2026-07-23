@@ -4,10 +4,20 @@ from app.database import get_connection
 from app.services.seed_destinations_service import seed_destinations
 from app.services.update_dest_scores_service import (
     update_all_destinations,
-    update_one_destination
+    update_one_destination,
+    refresh_destination_if_needed,
 )
+
 from app.services.update_map_scores_service import update_map_scores
 from app.services.map_update_checker import check_last_updated_map_scores
+
+import os
+
+# Read refresh duration from environment variables.
+# Defaults to 6 hours if the variable is missing.
+DESTINATION_REFRESH_HOURS = int(
+    os.getenv("DESTINATION_REFRESH_HOURS", "6")
+)
 
 
 router = APIRouter(
@@ -137,62 +147,99 @@ def update_destination(country_code: str):
         raise HTTPException(status_code=500, detail=str(error))
     
 
-@router.get("/{country_code}") 
-def get_destination(country_code: str): 
-    """ 
-    Used by DestinationDashboardPage. 
-    Returns detailed destination data from PostgreSQL. 
-    """ 
-    country_code = country_code.upper() 
-    conn = get_connection() 
-    cur = conn.cursor() 
+@router.get("/{country_code}")
+def get_destination(country_code: str):
+    """
+    Used by DestinationDashboardPage.
 
-    try: 
-        cur.execute("""
-            SELECT 
+    Database-first lazy-refresh flow:
+    1. Check whether destination data exists and is still fresh.
+    2. Refresh through external APIs only when data is missing or stale.
+    3. Read and return the final stored result from PostgreSQL.
+
+    Existing database data is kept as a fallback if an external API fails.
+    """
+
+    country_code = country_code.upper()
+
+    try:
+        # Refresh only when the stored dashboard data is missing or stale.
+        refresh_destination_if_needed(
+            country_code=country_code,
+            refresh_after_hours=DESTINATION_REFRESH_HOURS,
+        )
+
+    except ValueError:
+        raise HTTPException(
+            status_code=404,
+            detail="Destination not found",
+        )
+
+    except Exception as error:
+        # Do not immediately fail the page.
+        # Existing stored data may still be available even when an API is down.
+        print(
+            f"Lazy destination refresh failed for {country_code}:",
+            error,
+        )
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+        cur.execute(
+            """
+            SELECT
                 d.id,
-                d.country_code AS "countryCode", 
-                d.country_name AS country, 
-                d.city, 
-                ds.travel_score AS "travelScore", 
-                ds.risk_level AS "riskLevel", 
-                ds.condition_summary AS condition, 
-                ds.weather_summary AS weather, 
-                ds.news_summary AS news, 
-                ds.advisory_summary AS advisory, 
-                ds.last_updated AS "lastUpdated" 
-            FROM destinations d 
-            LEFT JOIN destination_scores ds 
-            ON d.id = ds.destination_id 
-            WHERE d.country_code = %s; 
-        """, (country_code.upper(),)) 
+                d.country_code AS "countryCode",
+                d.country_name AS country,
+                d.city,
+                ds.travel_score AS "travelScore",
+                ds.risk_level AS "riskLevel",
+                ds.condition_summary AS condition,
+                ds.weather_summary AS weather,
+                ds.news_summary AS news,
+                ds.advisory_summary AS advisory,
+                ds.last_updated AS "lastUpdated"
+            FROM destinations d
+            LEFT JOIN destination_scores ds
+                ON d.id = ds.destination_id
+            WHERE d.country_code = %s;
+            """,
+            (country_code,),
+        )
 
-        destination = cur.fetchone() 
+        destination = cur.fetchone()
 
-        if destination is None: 
-            raise HTTPException(status_code=404, detail="Destination not found") 
-        
-        cur.execute("""
+        if destination is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Destination not found",
+            )
+
+        cur.execute(
+            """
             SELECT
                 title,
                 abstracted_summary AS "abstractedSummary",
                 url,
                 source_name AS "sourceName",
                 published_at AS "publishedAt",
-                is_relevant AS "isRelevant"
+                is_relevant AS "isRelevant",
+                rank_position AS "rankPosition"
             FROM news_articles
             WHERE destination_id = %s
-            AND is_relevant = TRUE
+                AND is_relevant = TRUE
             ORDER BY rank_position ASC
             LIMIT 10;
-        """, (destination["id"],))
+            """,
+            (destination["id"],),
+        )
 
-        news_articles = cur.fetchall()
-
-        destination["newsArticles"] = news_articles
+        destination["newsArticles"] = cur.fetchall()
 
         return destination
-    
+
     finally:
         cur.close()
         conn.close()

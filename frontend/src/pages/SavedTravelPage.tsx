@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Hotel, Plane, RefreshCw } from "lucide-react";
+import { Bell, BellOff, Hotel, Plane, RefreshCw} from "lucide-react";
 
 import { useAuth } from "../context/AuthContext";
 
@@ -9,6 +9,15 @@ import {
   refreshSavedFlight,
   refreshSavedHotel,
 } from "../services/savedTravelApi";
+
+import {
+  createFlightPriceAlert,
+  createHotelPriceAlert,
+  deactivatePriceAlert,
+  getPriceAlerts,
+} from "../services/priceAlertApi";
+
+import type { PriceAlert } from "../types/priceAlert";
 
 import type { SavedFlight, SavedHotel } from "../types/savedTravel";
 
@@ -44,6 +53,16 @@ function SavedTravelPage() {
   const [refreshingItem, setRefreshingItem] = useState<string | null>(null);
   const [message, setMessage] = useState("");
 
+  // Stores all alerts belonging to the logged-in user.
+  const [priceAlerts, setPriceAlerts] = useState<PriceAlert[]>([]);
+
+  // Stores the alert input for each saved item separately.
+  // Example key: "flight-3" or "hotel-5".
+  const [alertInputs, setAlertInputs] = useState<Record<string, string>>({});
+
+  // Tracks which alert operation is currently running.
+  const [updatingAlertItem, setUpdatingAlertItem] = useState<string | null>(null);
+
   useEffect(() => {
     async function loadSavedTravel() {
       /*
@@ -59,13 +78,16 @@ function SavedTravelPage() {
       setMessage("");
 
       try {
-        const [flightResponse, hotelResponse] = await Promise.all([
+        // Load saved travel and alerts concurrently.
+        const [flightResponse, hotelResponse, alertResponse] = await Promise.all([
           getSavedFlights(),
           getSavedHotels(),
+          getPriceAlerts(),
         ]);
 
         setSavedFlights(flightResponse.results);
         setSavedHotels(hotelResponse.results);
+        setPriceAlerts(alertResponse.results);
       } catch (error) {
         if (error instanceof Error) {
           setMessage(error.message);
@@ -81,6 +103,222 @@ function SavedTravelPage() {
       loadSavedTravel();
     }
   }, [user, isAuthLoading]);
+
+
+  function getFlightAlert(savedFlightId: number): PriceAlert | undefined {
+    /*
+      Finds the active alert linked to a saved flight.
+    */
+
+    return priceAlerts.find(
+      (alert) =>
+        alert.alert_type === "flight" &&
+        alert.saved_flight_id === savedFlightId &&
+        alert.is_active
+    );
+  }
+
+  function getHotelAlert(savedHotelId: number): PriceAlert | undefined {
+    /*
+      Finds the active alert linked to a saved hotel.
+    */
+
+    return priceAlerts.find(
+      (alert) =>
+        alert.alert_type === "hotel" &&
+        alert.saved_hotel_id === savedHotelId &&
+        alert.is_active
+    );
+  }
+
+  function updateAlertInput(itemKey: string, value: string) {
+    /*
+      Updates only the input belonging to the selected saved item.
+    */
+
+    setAlertInputs((currentInputs) => ({
+      ...currentInputs,
+      [itemKey]: value,
+    }));
+  }
+
+  async function handleSetFlightAlert(
+    savedFlightId: number,
+    currency: string
+  ) {
+    /*
+      Creates a new alert or updates the existing active alert.
+      The backend handles duplicate prevention.
+    */
+
+    const itemKey = `flight-${savedFlightId}`;
+    const targetPrice = Number(alertInputs[itemKey]);
+
+    if (!Number.isFinite(targetPrice) || targetPrice <= 0) {
+      setMessage("Enter a valid flight target price greater than zero.");
+      return;
+    }
+
+    setUpdatingAlertItem(itemKey);
+    setMessage("");
+
+    try {
+      const updatedAlert = await createFlightPriceAlert(
+        savedFlightId,
+        targetPrice
+      );
+
+      setPriceAlerts((currentAlerts) => {
+        const existingIndex = currentAlerts.findIndex(
+          (alert) => alert.id === updatedAlert.id
+        );
+
+        // Replace an existing alert returned by the backend.
+        if (existingIndex !== -1) {
+          return currentAlerts.map((alert) =>
+            alert.id === updatedAlert.id ? updatedAlert : alert
+          );
+        }
+
+        // Add a newly created alert.
+        return [updatedAlert, ...currentAlerts];
+      });
+
+      setAlertInputs((currentInputs) => ({
+        ...currentInputs,
+        [itemKey]: "",
+      }));
+
+      setMessage(
+        `Flight price alert set for ${currency} ${targetPrice}.`
+      );
+    } catch (error) {
+      if (error instanceof Error) {
+        setMessage(error.message);
+      } else {
+        setMessage("Unable to set flight price alert.");
+      }
+    } finally {
+      setUpdatingAlertItem(null);
+    }
+  }
+
+  async function handleDeactivateFlightAlert(alert: PriceAlert) {
+    const itemKey = `flight-${alert.saved_flight_id}`;
+
+    setUpdatingAlertItem(itemKey);
+    setMessage("");
+
+    try {
+      const deactivatedAlert = await deactivatePriceAlert(alert.id);
+
+      // Keep the alert history, but replace it with its inactive version.
+      setPriceAlerts((currentAlerts) =>
+        currentAlerts.map((currentAlert) =>
+          currentAlert.id === deactivatedAlert.id
+            ? deactivatedAlert
+            : currentAlert
+        )
+      );
+
+      setMessage("Flight price alert deactivated.");
+    } catch (error) {
+      if (error instanceof Error) {
+        setMessage(error.message);
+      } else {
+        setMessage("Unable to deactivate flight price alert.");
+      }
+    } finally {
+      setUpdatingAlertItem(null);
+    }
+  }
+
+  async function handleSetHotelAlert(
+    savedHotelId: number,
+    currency: string
+  ) {
+    /*
+      Creates a new hotel alert or updates its existing active alert.
+    */
+
+    const itemKey = `hotel-${savedHotelId}`;
+    const targetPrice = Number(alertInputs[itemKey]);
+
+    if (!Number.isFinite(targetPrice) || targetPrice <= 0) {
+      setMessage("Enter a valid hotel target price greater than zero.");
+      return;
+    }
+
+    setUpdatingAlertItem(itemKey);
+    setMessage("");
+
+    try {
+      const updatedAlert = await createHotelPriceAlert(
+        savedHotelId,
+        targetPrice
+      );
+
+      setPriceAlerts((currentAlerts) => {
+        const alertAlreadyExists = currentAlerts.some(
+          (alert) => alert.id === updatedAlert.id
+        );
+
+        if (alertAlreadyExists) {
+          return currentAlerts.map((alert) =>
+            alert.id === updatedAlert.id ? updatedAlert : alert
+          );
+        }
+
+        return [updatedAlert, ...currentAlerts];
+      });
+
+      setAlertInputs((currentInputs) => ({
+        ...currentInputs,
+        [itemKey]: "",
+      }));
+
+      setMessage(
+        `Hotel price alert set for ${currency} ${targetPrice}.`
+      );
+    } catch (error) {
+      if (error instanceof Error) {
+        setMessage(error.message);
+      } else {
+        setMessage("Unable to set hotel price alert.");
+      }
+    } finally {
+      setUpdatingAlertItem(null);
+    }
+  }
+
+  async function handleDeactivateHotelAlert(alert: PriceAlert) {
+    const itemKey = `hotel-${alert.saved_hotel_id}`;
+
+    setUpdatingAlertItem(itemKey);
+    setMessage("");
+
+    try {
+      const deactivatedAlert = await deactivatePriceAlert(alert.id);
+
+      setPriceAlerts((currentAlerts) =>
+        currentAlerts.map((currentAlert) =>
+          currentAlert.id === deactivatedAlert.id
+            ? deactivatedAlert
+            : currentAlert
+        )
+      );
+
+      setMessage("Hotel price alert deactivated.");
+    } catch (error) {
+      if (error instanceof Error) {
+        setMessage(error.message);
+      } else {
+        setMessage("Unable to deactivate hotel price alert.");
+      }
+    } finally {
+      setUpdatingAlertItem(null);
+    }
+  }
 
   async function handleRefreshFlight(savedFlightId: number) {
     /*
@@ -191,7 +429,11 @@ function SavedTravelPage() {
           </div>
 
           <div className="grid gap-4">
-            {savedFlights.map((flight) => (
+            {savedFlights.map((flight) => {
+              const activeAlert = getFlightAlert(flight.id);
+              const itemKey = `flight-${flight.id}`;
+
+              return (
               <div
                 key={flight.id}
                 className="flex flex-col gap-4 rounded-2xl border border-slate-800 bg-slate-900 p-5 md:flex-row md:items-center md:justify-between"
@@ -243,6 +485,68 @@ function SavedTravelPage() {
                     </>
                   )}
 
+                  <div className="mt-4 border-t border-slate-800 pt-4">
+                    {activeAlert ? (
+                      <>
+                        <div className="flex items-center gap-2 md:justify-end">
+                          <Bell size={15} className="text-green-400" />
+
+                          <p className="text-sm text-green-400">
+                            Alert: {flight.currency} {activeAlert.target_price}
+                          </p>
+                        </div>
+
+                        <p className="mt-1 text-xs text-slate-500">
+                          Status: {activeAlert.notification_status}
+                        </p>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeactivateFlightAlert(activeAlert)}
+                          disabled={updatingAlertItem === itemKey}
+                          className="mt-3 inline-flex items-center gap-2 rounded-lg border border-red-400/50 px-3 py-2 text-sm text-red-300 transition hover:bg-red-400/10 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <BellOff size={14} />
+                          {updatingAlertItem === itemKey
+                            ? "Updating..."
+                            : "Deactivate alert"}
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <label className="block text-sm text-slate-400">
+                          Price alert target
+                        </label>
+
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={alertInputs[itemKey] ?? ""}
+                          onChange={(event) =>
+                            updateAlertInput(itemKey, event.target.value)
+                          }
+                          placeholder={`Target in ${flight.currency}`}
+                          className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-amber-500 md:w-48"
+                        />
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleSetFlightAlert(flight.id, flight.currency)
+                          }
+                          disabled={updatingAlertItem === itemKey}
+                          className="mt-2 inline-flex items-center gap-2 rounded-lg border border-green-500 px-3 py-2 text-sm font-semibold text-green-400 transition hover:bg-green-500 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <Bell size={14} />
+                          {updatingAlertItem === itemKey
+                            ? "Setting..."
+                            : "Set alert"}
+                        </button>
+                      </>
+                    )}
+                  </div>
+
                   <button
                     type="button"
                     onClick={() => handleRefreshFlight(flight.id)}
@@ -256,7 +560,8 @@ function SavedTravelPage() {
                   </button>
                 </div>
               </div>
-            ))}
+            );
+          })}
 
             {!isLoading && savedFlights.length === 0 && (
               <p className="text-slate-400">No saved flights yet.</p>
@@ -271,7 +576,11 @@ function SavedTravelPage() {
           </div>
 
           <div className="grid gap-4">
-            {savedHotels.map((hotel) => (
+            {savedHotels.map((hotel) => {
+              const activeAlert = getHotelAlert(hotel.id);
+              const itemKey = `hotel-${hotel.id}`;
+
+              return (
               <div
                 key={hotel.id}
                 className="flex flex-col gap-4 rounded-2xl border border-slate-800 bg-slate-900 p-5 md:flex-row md:items-center md:justify-between"
@@ -323,6 +632,72 @@ function SavedTravelPage() {
                     </>
                   )}
 
+                  {/* Price-alert controls for this saved hotel. */}
+                  <div className="mt-4 border-t border-slate-800 pt-4">
+                    {activeAlert ? (
+                      <>
+                        <div className="flex items-center gap-2 md:justify-end">
+                          <Bell size={15} className="text-green-400" />
+
+                          <p className="text-sm text-green-400">
+                            Alert: {hotel.currency} {activeAlert.target_price}
+                          </p>
+                        </div>
+
+                        <p className="mt-1 text-xs text-slate-500">
+                          Status: {activeAlert.notification_status}
+                        </p>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeactivateHotelAlert(activeAlert)}
+                          disabled={updatingAlertItem === itemKey}
+                          className="mt-3 inline-flex items-center gap-2 rounded-lg border border-red-400/50 px-3 py-2 text-sm text-red-300 transition hover:bg-red-400/10 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <BellOff size={14} />
+
+                          {updatingAlertItem === itemKey
+                            ? "Updating..."
+                            : "Deactivate alert"}
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <label className="block text-sm text-slate-400">
+                          Price alert target
+                        </label>
+
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={alertInputs[itemKey] ?? ""}
+                          onChange={(event) =>
+                            updateAlertInput(itemKey, event.target.value)
+                          }
+                          placeholder={`Target in ${hotel.currency}`}
+                          className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-amber-500 md:w-48"
+                        />
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleSetHotelAlert(hotel.id, hotel.currency)
+                          }
+                          disabled={updatingAlertItem === itemKey}
+                          className="mt-2 inline-flex items-center gap-2 rounded-lg border border-green-500 px-3 py-2 text-sm font-semibold text-green-400 transition hover:bg-green-500 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <Bell size={14} />
+
+                          {updatingAlertItem === itemKey
+                            ? "Setting..."
+                            : "Set alert"}
+                        </button>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Manually refresh the latest hotel price. */}
                   <button
                     type="button"
                     onClick={() => handleRefreshHotel(hotel.id)}
@@ -330,13 +705,15 @@ function SavedTravelPage() {
                     className="mt-3 inline-flex items-center gap-2 rounded-lg border border-amber-500 px-4 py-2 text-sm font-semibold text-amber-400 transition hover:bg-amber-500 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <RefreshCw size={14} />
+
                     {refreshingItem === `hotel-${hotel.id}`
                       ? "Refreshing..."
                       : "Refresh price"}
                   </button>
                 </div>
               </div>
-            ))}
+            );
+          })}
 
             {!isLoading && savedHotels.length === 0 && (
               <p className="text-slate-400">No saved hotels yet.</p>
