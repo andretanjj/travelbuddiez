@@ -1,8 +1,9 @@
 from fastapi import HTTPException, status
 
 from app.database import get_connection
-from app.services.saved_travel_service import get_user_id_by_username
+from app.services.user_service import get_user_id_by_username
 
+from app.services.email_service import send_price_alert_email
 
 def create_flight_price_alert(
     username: str,
@@ -10,12 +11,11 @@ def create_flight_price_alert(
     target_price: float,
 ):
     """
-    Creates or updates an active price alert for one saved flight.
+    Creates or updates a flight price alert.
 
-    The saved flight must belong to the logged-in user.
+    When the latest known flight price is already at or below the target,
+    the notification email is sent immediately.
     """
-
-    user_id = get_user_id_by_username(username)
 
     if target_price <= 0:
         raise HTTPException(
@@ -23,28 +23,52 @@ def create_flight_price_alert(
             detail="Target price must be greater than zero",
         )
 
+    user_id = get_user_id_by_username(username)
+
     conn = get_connection()
     cur = conn.cursor()
 
     try:
-        # Confirm that the saved flight belongs to the current user.
+        # Verify ownership and retrieve the information needed for the email.
         cur.execute(
             """
-            SELECT id
-            FROM saved_flights
-            WHERE id = %s
-              AND user_id = %s;
+            SELECT
+                sf.id,
+                sf.current_price,
+                sf.currency,
+                sf.origin_name,
+                sf.destination_name,
+                u.email
+            FROM saved_flights AS sf
+            JOIN users AS u
+                ON u.id = sf.user_id
+            WHERE sf.id = %s
+              AND sf.user_id = %s;
             """,
-            (saved_flight_id, user_id),
+            (
+                saved_flight_id,
+                user_id,
+            ),
         )
 
-        if cur.fetchone() is None:
+        saved_flight = cur.fetchone()
+
+        if saved_flight is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Saved flight not found",
             )
 
-        # Reuse an existing active alert instead of creating duplicates.
+        current_price = saved_flight["current_price"]
+
+        target_reached = (
+            current_price is not None
+            and float(current_price) <= float(target_price)
+        )
+
+        initial_status = "triggered" if target_reached else "pending"
+
+        # Check for an existing alert, including an inactive alert.
         cur.execute(
             """
             SELECT id
@@ -52,29 +76,42 @@ def create_flight_price_alert(
             WHERE user_id = %s
               AND alert_type = 'flight'
               AND saved_flight_id = %s
-              AND is_active = TRUE;
+            ORDER BY created_at DESC
+            LIMIT 1;
             """,
-            (user_id, saved_flight_id),
+            (
+                user_id,
+                saved_flight_id,
+            ),
         )
 
         existing_alert = cur.fetchone()
 
-        if existing_alert:
+        if existing_alert is not None:
             cur.execute(
                 """
                 UPDATE price_alerts
                 SET
                     target_price = %s,
-                    notification_status = 'pending',
+                    is_active = TRUE,
+                    notification_status = %s,
+                    last_checked_at = NOW(),
+                    last_notified_at = NULL,
                     updated_at = NOW()
                 WHERE id = %s
+                  AND user_id = %s
                 RETURNING *;
                 """,
                 (
                     target_price,
+                    initial_status,
                     existing_alert["id"],
+                    user_id,
                 ),
             )
+
+            saved_alert = cur.fetchone()
+
         else:
             cur.execute(
                 """
@@ -86,6 +123,8 @@ def create_flight_price_alert(
                     saved_flight_id,
                     saved_hotel_id,
                     notification_status,
+                    last_checked_at,
+                    last_notified_at,
                     created_at,
                     updated_at
                 )
@@ -96,7 +135,9 @@ def create_flight_price_alert(
                     TRUE,
                     %s,
                     NULL,
-                    'pending',
+                    %s,
+                    NOW(),
+                    NULL,
                     NOW(),
                     NOW()
                 )
@@ -106,13 +147,54 @@ def create_flight_price_alert(
                     user_id,
                     target_price,
                     saved_flight_id,
+                    initial_status,
                 ),
             )
 
-        alert = cur.fetchone()
+            saved_alert = cur.fetchone()
+
+        # Send immediately when the current price already meets the target.
+        if target_reached:
+            item_name = (
+                f'{saved_flight["origin_name"]} to '
+                f'{saved_flight["destination_name"]}'
+            )
+
+            try:
+                send_price_alert_email(
+                    recipient_email=saved_flight["email"],
+                    item_type="flight",
+                    item_name=item_name,
+                    current_price=float(current_price),
+                    target_price=float(target_price),
+                    currency=saved_flight["currency"],
+                )
+
+                cur.execute(
+                    """
+                    UPDATE price_alerts
+                    SET
+                        notification_status = 'notified',
+                        last_notified_at = NOW(),
+                        updated_at = NOW()
+                    WHERE id = %s
+                    RETURNING *;
+                    """,
+                    (saved_alert["id"],),
+                )
+
+                saved_alert = cur.fetchone()
+
+            except Exception as error:
+                # Keep the alert as triggered so Celery can retry it later.
+                print(
+                    f"Unable to send flight alert email "
+                    f"for alert {saved_alert['id']}: {error}"
+                )
+
         conn.commit()
 
-        return dict(alert)
+        return dict(saved_alert)
 
     except HTTPException:
         conn.rollback()
@@ -137,12 +219,11 @@ def create_hotel_price_alert(
     target_price: float,
 ):
     """
-    Creates or updates an active price alert for one saved hotel.
+    Creates or updates a hotel price alert.
 
-    The saved hotel must belong to the logged-in user.
+    When the latest known hotel price is already at or below the target,
+    the notification email is sent immediately.
     """
-
-    user_id = get_user_id_by_username(username)
 
     if target_price <= 0:
         raise HTTPException(
@@ -150,28 +231,52 @@ def create_hotel_price_alert(
             detail="Target price must be greater than zero",
         )
 
+    user_id = get_user_id_by_username(username)
+
     conn = get_connection()
     cur = conn.cursor()
 
     try:
-        # Confirm that the saved hotel belongs to the current user.
+        # Verify ownership and retrieve the information needed for the email.
         cur.execute(
             """
-            SELECT id
-            FROM saved_hotels
-            WHERE id = %s
-              AND user_id = %s;
+            SELECT
+                sh.id,
+                sh.current_price,
+                sh.currency,
+                sh.hotel_name,
+                sh.city,
+                sh.country,
+                u.email
+            FROM saved_hotels AS sh
+            JOIN users AS u
+                ON u.id = sh.user_id
+            WHERE sh.id = %s
+              AND sh.user_id = %s;
             """,
-            (saved_hotel_id, user_id),
+            (
+                saved_hotel_id,
+                user_id,
+            ),
         )
 
-        if cur.fetchone() is None:
+        saved_hotel = cur.fetchone()
+
+        if saved_hotel is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Saved hotel not found",
             )
 
-        # Reuse an existing active alert instead of creating duplicates.
+        current_price = saved_hotel["current_price"]
+
+        target_reached = (
+            current_price is not None
+            and float(current_price) <= float(target_price)
+        )
+
+        initial_status = "triggered" if target_reached else "pending"
+
         cur.execute(
             """
             SELECT id
@@ -179,29 +284,42 @@ def create_hotel_price_alert(
             WHERE user_id = %s
               AND alert_type = 'hotel'
               AND saved_hotel_id = %s
-              AND is_active = TRUE;
+            ORDER BY created_at DESC
+            LIMIT 1;
             """,
-            (user_id, saved_hotel_id),
+            (
+                user_id,
+                saved_hotel_id,
+            ),
         )
 
         existing_alert = cur.fetchone()
 
-        if existing_alert:
+        if existing_alert is not None:
             cur.execute(
                 """
                 UPDATE price_alerts
                 SET
                     target_price = %s,
-                    notification_status = 'pending',
+                    is_active = TRUE,
+                    notification_status = %s,
+                    last_checked_at = NOW(),
+                    last_notified_at = NULL,
                     updated_at = NOW()
                 WHERE id = %s
+                  AND user_id = %s
                 RETURNING *;
                 """,
                 (
                     target_price,
+                    initial_status,
                     existing_alert["id"],
+                    user_id,
                 ),
             )
+
+            saved_alert = cur.fetchone()
+
         else:
             cur.execute(
                 """
@@ -213,6 +331,8 @@ def create_hotel_price_alert(
                     saved_flight_id,
                     saved_hotel_id,
                     notification_status,
+                    last_checked_at,
+                    last_notified_at,
                     created_at,
                     updated_at
                 )
@@ -223,7 +343,9 @@ def create_hotel_price_alert(
                     TRUE,
                     NULL,
                     %s,
-                    'pending',
+                    %s,
+                    NOW(),
+                    NULL,
                     NOW(),
                     NOW()
                 )
@@ -233,13 +355,54 @@ def create_hotel_price_alert(
                     user_id,
                     target_price,
                     saved_hotel_id,
+                    initial_status,
                 ),
             )
 
-        alert = cur.fetchone()
+            saved_alert = cur.fetchone()
+
+        if target_reached:
+            item_name = (
+                f'{saved_hotel["hotel_name"]}, '
+                f'{saved_hotel["city"]}, '
+                f'{saved_hotel["country"]}'
+            )
+
+            try:
+                send_price_alert_email(
+                    recipient_email=saved_hotel["email"],
+                    item_type="hotel",
+                    item_name=item_name,
+                    current_price=float(current_price),
+                    target_price=float(target_price),
+                    currency=saved_hotel["currency"],
+                )
+
+                cur.execute(
+                    """
+                    UPDATE price_alerts
+                    SET
+                        notification_status = 'notified',
+                        last_notified_at = NOW(),
+                        updated_at = NOW()
+                    WHERE id = %s
+                    RETURNING *;
+                    """,
+                    (saved_alert["id"],),
+                )
+
+                saved_alert = cur.fetchone()
+
+            except Exception as error:
+                # Remains triggered so the scheduled checker can retry later.
+                print(
+                    f"Unable to send hotel alert email "
+                    f"for alert {saved_alert['id']}: {error}"
+                )
+
         conn.commit()
 
-        return dict(alert)
+        return dict(saved_alert)
 
     except HTTPException:
         conn.rollback()
@@ -351,3 +514,284 @@ def deactivate_price_alert(username: str, alert_id: int):
     finally:
         cur.close()
         conn.close()
+
+
+def evaluate_flight_alerts(
+    cur,
+    saved_flight_id: int,
+    current_price: float | None,
+):
+    """
+    Evaluates active alerts linked to one saved flight.
+
+    Status flow:
+    - unavailable: no current price was returned
+    - pending: current price is above the user's target
+    - notified: target was reached and the email was sent
+    - triggered: target was reached, but email delivery failed
+
+    Alerts already marked as notified are not emailed repeatedly.
+    """
+
+    cur.execute(
+        """
+        SELECT
+            pa.id,
+            pa.target_price,
+            pa.notification_status,
+            pa.last_notified_at,
+            u.email,
+            sf.origin_name,
+            sf.destination_name,
+            sf.currency
+        FROM price_alerts AS pa
+        JOIN users AS u
+            ON u.id = pa.user_id
+        JOIN saved_flights AS sf
+            ON sf.id = pa.saved_flight_id
+        WHERE pa.alert_type = 'flight'
+          AND pa.saved_flight_id = %s
+          AND pa.is_active = TRUE;
+        """,
+        (saved_flight_id,),
+    )
+
+    alerts = cur.fetchall()
+
+    for alert in alerts:
+        # No current result was returned by Duffel.
+        if current_price is None:
+            cur.execute(
+                """
+                UPDATE price_alerts
+                SET
+                    notification_status = 'unavailable',
+                    last_checked_at = NOW(),
+                    updated_at = NOW()
+                WHERE id = %s;
+                """,
+                (alert["id"],),
+            )
+
+            continue
+
+        target_price = float(alert["target_price"])
+        latest_price = float(current_price)
+
+        # Price is still above the user's target.
+        if latest_price > target_price:
+            cur.execute(
+                """
+                UPDATE price_alerts
+                SET
+                    notification_status = 'pending',
+                    last_checked_at = NOW(),
+                    updated_at = NOW()
+                WHERE id = %s;
+                """,
+                (alert["id"],),
+            )
+
+            continue
+
+        # Do not send the same alert repeatedly after a successful email.
+        if (
+            alert["notification_status"] == "notified"
+            and alert["last_notified_at"] is not None
+        ):
+            cur.execute(
+                """
+                UPDATE price_alerts
+                SET
+                    last_checked_at = NOW(),
+                    updated_at = NOW()
+                WHERE id = %s;
+                """,
+                (alert["id"],),
+            )
+
+            continue
+
+        item_name = (
+            f'{alert["origin_name"]} to '
+            f'{alert["destination_name"]}'
+        )
+
+        try:
+            send_price_alert_email(
+                recipient_email=alert["email"],
+                item_type="flight",
+                item_name=item_name,
+                current_price=latest_price,
+                target_price=target_price,
+                currency=alert["currency"],
+            )
+
+            # Email was successfully accepted by Resend.
+            cur.execute(
+                """
+                UPDATE price_alerts
+                SET
+                    notification_status = 'notified',
+                    last_checked_at = NOW(),
+                    last_notified_at = NOW(),
+                    updated_at = NOW()
+                WHERE id = %s;
+                """,
+                (alert["id"],),
+            )
+
+        except Exception as error:
+            # Keep the price refresh successful even when email delivery fails.
+            # The triggered state allows a later scheduled check to retry.
+            print(
+                f"Unable to send flight alert email "
+                f"for alert {alert['id']}: {error}"
+            )
+
+            cur.execute(
+                """
+                UPDATE price_alerts
+                SET
+                    notification_status = 'triggered',
+                    last_checked_at = NOW(),
+                    updated_at = NOW()
+                WHERE id = %s;
+                """,
+                (alert["id"],),
+            )
+
+
+def evaluate_hotel_alerts(
+    cur,
+    saved_hotel_id: int,
+    current_price: float | None,
+):
+    """
+    Evaluates active alerts linked to one saved hotel and sends an email
+    when the current total stay price reaches the target.
+    """
+
+    cur.execute(
+        """
+        SELECT
+            pa.id,
+            pa.target_price,
+            pa.notification_status,
+            pa.last_notified_at,
+            u.email,
+            sh.hotel_name,
+            sh.city,
+            sh.country,
+            sh.currency
+        FROM price_alerts AS pa
+        JOIN users AS u
+            ON u.id = pa.user_id
+        JOIN saved_hotels AS sh
+            ON sh.id = pa.saved_hotel_id
+        WHERE pa.alert_type = 'hotel'
+          AND pa.saved_hotel_id = %s
+          AND pa.is_active = TRUE;
+        """,
+        (saved_hotel_id,),
+    )
+
+    alerts = cur.fetchall()
+
+    for alert in alerts:
+        if current_price is None:
+            cur.execute(
+                """
+                UPDATE price_alerts
+                SET
+                    notification_status = 'unavailable',
+                    last_checked_at = NOW(),
+                    updated_at = NOW()
+                WHERE id = %s;
+                """,
+                (alert["id"],),
+            )
+
+            continue
+
+        target_price = float(alert["target_price"])
+        latest_price = float(current_price)
+
+        if latest_price > target_price:
+            cur.execute(
+                """
+                UPDATE price_alerts
+                SET
+                    notification_status = 'pending',
+                    last_checked_at = NOW(),
+                    updated_at = NOW()
+                WHERE id = %s;
+                """,
+                (alert["id"],),
+            )
+
+            continue
+
+        if (
+            alert["notification_status"] == "notified"
+            and alert["last_notified_at"] is not None
+        ):
+            cur.execute(
+                """
+                UPDATE price_alerts
+                SET
+                    last_checked_at = NOW(),
+                    updated_at = NOW()
+                WHERE id = %s;
+                """,
+                (alert["id"],),
+            )
+
+            continue
+
+        item_name = (
+            f'{alert["hotel_name"]}, '
+            f'{alert["city"]}, '
+            f'{alert["country"]}'
+        )
+
+        try:
+            send_price_alert_email(
+                recipient_email=alert["email"],
+                item_type="hotel",
+                item_name=item_name,
+                current_price=latest_price,
+                target_price=target_price,
+                currency=alert["currency"],
+            )
+
+            cur.execute(
+                """
+                UPDATE price_alerts
+                SET
+                    notification_status = 'notified',
+                    last_checked_at = NOW(),
+                    last_notified_at = NOW(),
+                    updated_at = NOW()
+                WHERE id = %s;
+                """,
+                (alert["id"],),
+            )
+
+        except Exception as error:
+            print(
+                f"Unable to send hotel alert email "
+                f"for alert {alert['id']}: {error}"
+            )
+
+            cur.execute(
+                """
+                UPDATE price_alerts
+                SET
+                    notification_status = 'triggered',
+                    last_checked_at = NOW(),
+                    updated_at = NOW()
+                WHERE id = %s;
+                """,
+                (alert["id"],),
+            )

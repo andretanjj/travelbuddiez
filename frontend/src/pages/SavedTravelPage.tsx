@@ -429,6 +429,10 @@ function SavedTravelPage() {
     try {
       const updatedFlight = await refreshSavedFlight(savedFlightId);
 
+      // Reload alerts because the backend may have changed pending to triggered.
+      const alertResponse = await getPriceAlerts();
+      setPriceAlerts(alertResponse.results);
+
       setSavedFlights((currentFlights) =>
         currentFlights.map((flight) =>
           flight.id === updatedFlight.id ? updatedFlight : flight
@@ -457,6 +461,10 @@ function SavedTravelPage() {
 
     try {
       const updatedHotel = await refreshSavedHotel(savedHotelId);
+
+      // Reload the latest alert statuses after evaluating the new hotel price.
+      const alertResponse = await getPriceAlerts();
+      setPriceAlerts(alertResponse.results);
 
       setSavedHotels((currentHotels) =>
         currentHotels.map((hotel) =>

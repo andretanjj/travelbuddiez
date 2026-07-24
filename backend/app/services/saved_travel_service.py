@@ -5,41 +5,9 @@ from fastapi import HTTPException, status
 from app.database import get_connection
 from app.services.travel_planning_service import search_flights, search_hotels
 
+from app.services.price_alert_service import evaluate_flight_alerts, evaluate_hotel_alerts
 
-def get_user_id_by_username(username: str) -> int:
-    """
-    Gets the database user id from the username stored in the JWT.
-
-    Current auth User model does not expose id to the frontend,
-    so saved travel routes resolve user_id internally.
-    """
-
-    conn = get_connection()
-    cur = conn.cursor()
-
-    try:
-        cur.execute(
-            """
-            SELECT id
-            FROM users
-            WHERE username = %s;
-            """,
-            (username,),
-        )
-
-        user_row = cur.fetchone()
-
-        if user_row is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found",
-            )
-
-        return user_row["id"]
-
-    finally:
-        cur.close()
-        conn.close()
+from app.services.user_service import get_user_id_by_username
 
 
 def get_price_status(saved_price: float, current_price: float) -> str:
@@ -342,6 +310,17 @@ def refresh_saved_flight_price(username: str, saved_flight_id: int):
         )
 
         updated_flight = cur.fetchone()
+
+        # Evaluate any active alert linked to this saved flight.
+        evaluate_flight_alerts(
+            cur=cur,
+            saved_flight_id=saved_flight_id,
+            current_price=(
+                None
+                if new_status == "unavailable"
+                else float(current_price)
+            ),
+        )
         conn.commit()
 
         return dict(updated_flight)
@@ -430,6 +409,17 @@ def refresh_saved_hotel_price(username: str, saved_hotel_id: int):
         )
 
         updated_hotel = cur.fetchone()
+        
+        # Evaluate any active alert linked to this saved hotel.
+        evaluate_hotel_alerts(
+            cur=cur,
+            saved_hotel_id=saved_hotel_id,
+            current_price=(
+                None
+                if new_status == "unavailable"
+                else float(current_price)
+            ),
+        )
         conn.commit()
 
         return dict(updated_hotel)
