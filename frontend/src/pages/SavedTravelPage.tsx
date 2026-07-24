@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
-import { Bell, BellOff, Hotel, Plane, RefreshCw} from "lucide-react";
+import { Bell, BellOff, Hotel, Plane, RefreshCw, Trash2} from "lucide-react";
 
 import { useAuth } from "../context/AuthContext";
 
 import {
+  deleteSavedFlight,
+  deleteSavedHotel,
   getSavedFlights,
   getSavedHotels,
   refreshSavedFlight,
@@ -63,6 +65,9 @@ function SavedTravelPage() {
   // Tracks which alert operation is currently running.
   const [updatingAlertItem, setUpdatingAlertItem] = useState<string | null>(null);
 
+  // Tracks the saved item currently being deleted.
+  const [deletingItem, setDeletingItem] = useState<string | null>(null);
+
   useEffect(() => {
     async function loadSavedTravel() {
       /*
@@ -103,6 +108,23 @@ function SavedTravelPage() {
       loadSavedTravel();
     }
   }, [user, isAuthLoading]);
+
+  useEffect(() => {
+    /*
+      Automatically clears refresh/delete/alert feedback after 3 seconds.
+    */
+
+    if (!message) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setMessage("");
+    }, 3000);
+
+    // Prevent stale timers when another message appears quickly.
+    return () => window.clearTimeout(timeoutId);
+  }, [message]);
 
 
   function getFlightAlert(savedFlightId: number): PriceAlert | undefined {
@@ -317,6 +339,82 @@ function SavedTravelPage() {
       }
     } finally {
       setUpdatingAlertItem(null);
+    }
+  }
+
+  async function handleDeleteFlight(savedFlightId: number) {
+    /*
+      Deletes the saved flight from PostgreSQL.
+
+      After the backend confirms deletion, remove the item and any linked
+      alert from local React state.
+    */
+
+    const itemKey = `flight-${savedFlightId}`;
+
+    setDeletingItem(itemKey);
+    setMessage("");
+
+    try {
+      await deleteSavedFlight(savedFlightId);
+
+      // Remove the deleted flight without reloading the entire page.
+      setSavedFlights((currentFlights) =>
+        currentFlights.filter((flight) => flight.id !== savedFlightId)
+      );
+
+      // Remove any linked price alert from the current page state.
+      setPriceAlerts((currentAlerts) =>
+        currentAlerts.filter(
+          (alert) => alert.saved_flight_id !== savedFlightId
+        )
+      );
+
+      setMessage("Saved flight removed.");
+    } catch (error) {
+      if (error instanceof Error) {
+        setMessage(error.message);
+      } else {
+        setMessage("Unable to remove saved flight.");
+      }
+    } finally {
+      setDeletingItem(null);
+    }
+  }
+
+
+  async function handleDeleteHotel(savedHotelId: number) {
+    /*
+      Deletes the saved hotel from PostgreSQL and updates the page state.
+    */
+
+    const itemKey = `hotel-${savedHotelId}`;
+
+    setDeletingItem(itemKey);
+    setMessage("");
+
+    try {
+      await deleteSavedHotel(savedHotelId);
+
+      setSavedHotels((currentHotels) =>
+        currentHotels.filter((hotel) => hotel.id !== savedHotelId)
+      );
+
+      setPriceAlerts((currentAlerts) =>
+        currentAlerts.filter(
+          (alert) => alert.saved_hotel_id !== savedHotelId
+        )
+      );
+
+      setMessage("Saved hotel removed.");
+    } catch (error) {
+      if (error instanceof Error) {
+        setMessage(error.message);
+      } else {
+        setMessage("Unable to remove saved hotel.");
+      }
+    } finally {
+      setDeletingItem(null);
     }
   }
 
@@ -558,6 +656,17 @@ function SavedTravelPage() {
                       ? "Refreshing..."
                       : "Refresh price"}
                   </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteFlight(flight.id)}
+                    disabled={deletingItem === itemKey}
+                    className="ml-2 mt-3 inline-flex items-center gap-2 rounded-lg border border-red-400/50 px-4 py-2 text-sm font-semibold text-red-300 transition hover:bg-red-400/10 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <Trash2 size={14} />
+
+                    {deletingItem === itemKey ? "Removing..." : "Remove"}
+                  </button>
                 </div>
               </div>
             );
@@ -709,6 +818,17 @@ function SavedTravelPage() {
                     {refreshingItem === `hotel-${hotel.id}`
                       ? "Refreshing..."
                       : "Refresh price"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteHotel(hotel.id)}
+                    disabled={deletingItem === itemKey}
+                    className="ml-2 mt-3 inline-flex items-center gap-2 rounded-lg border border-red-400/50 px-4 py-2 text-sm font-semibold text-red-300 transition hover:bg-red-400/10 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <Trash2 size={14} />
+
+                    {deletingItem === itemKey ? "Removing..." : "Remove"}
                   </button>
                 </div>
               </div>

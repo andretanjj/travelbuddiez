@@ -1,7 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { Plane, Hotel, Search, MapPin } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { saveFlight, saveHotel } from "../services/savedTravelApi";
+import type { SavedFlight, SavedHotel } from "../types/savedTravel";
+import {
+  deleteSavedFlight,
+  deleteSavedHotel,
+  getSavedFlights,
+  getSavedHotels,
+  saveFlight,
+  saveHotel,
+} from "../services/savedTravelApi";
 
 import {
   searchFlights,
@@ -75,6 +83,11 @@ function TravelPlanningPage() {
   const [saveMessage, setSaveMessage] = useState("");
   const [savingItemId, setSavingItemId] = useState<string | null>(null);
 
+  // Saved database records belonging to the logged-in user.
+  // These let the search cards show whether a result is already saved.
+  const [savedFlights, setSavedFlights] = useState<SavedFlight[]>([]);
+  const [savedHotels, setSavedHotels] = useState<SavedHotel[]>([]);
+
   const activeSearchText =
     activeSuggestionTarget === "origin"
       ? originInput
@@ -128,6 +141,55 @@ function TravelPlanningPage() {
 
     return () => window.clearTimeout(timeoutId);
   }, [activeSearchText, activeSuggestionTarget]);
+
+  useEffect(() => {
+    async function loadSavedTravel() {
+      /*
+        Guests may search, but only logged-in users have saved travel.
+
+        Loading both saved lists allows the search result buttons to show
+        "Flight saved" or "Hotel saved" for existing database records.
+      */
+
+      if (user === null) {
+        setSavedFlights([]);
+        setSavedHotels([]);
+        return;
+      }
+
+      try {
+        const [flightResponse, hotelResponse] = await Promise.all([
+          getSavedFlights(),
+          getSavedHotels(),
+        ]);
+
+        setSavedFlights(flightResponse.results);
+        setSavedHotels(hotelResponse.results);
+      } catch (error) {
+        console.error("Unable to load saved travel state:", error);
+      }
+    }
+
+    loadSavedTravel();
+  }, [user]);
+
+  useEffect(() => {
+    /*
+      Automatically clears save/remove/alert feedback after 3 seconds.
+      Nothing happens when there is no message.
+    */
+
+    if (!saveMessage) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setSaveMessage("");
+    }, 3000);
+
+    // Clear the old timer if the message changes or the component unmounts.
+    return () => window.clearTimeout(timeoutId);
+  }, [saveMessage]);
 
   async function handleSearch(event: React.FormEvent<HTMLFormElement>) {
     // Prevent browser refresh when the form is submitted.
@@ -228,12 +290,44 @@ function TravelPlanningPage() {
     setActiveSuggestionTarget(null);
   }
 
-  async function handleSaveFlight(flight: FlightResult) {
+  function findSavedFlight(flight: FlightResult): SavedFlight | undefined {
     /*
-      Saves the selected flight first.
+      Duffel result IDs are not currently stored in saved_flights.
 
-      When the user entered a valid target price, an alert is then linked
-      to the newly created saved_flights row.
+      Therefore, identify the saved result using its important snapshot fields.
+    */
+
+    return savedFlights.find(
+      (savedFlight) =>
+        savedFlight.origin_code === selectedOriginCode &&
+        savedFlight.destination_code === selectedDestinationCode &&
+        savedFlight.departure_date === flight.departureDate &&
+        savedFlight.airline === flight.airline &&
+        Number(savedFlight.saved_price) === Number(flight.price)
+    );
+  }
+
+
+  function findSavedHotel(hotel: HotelResult): SavedHotel | undefined {
+    /*
+      Match the LiteAPI hotel snapshot using hotel name, destination,
+      dates, and saved total price.
+    */
+
+    return savedHotels.find(
+      (savedHotel) =>
+        savedHotel.hotel_name === hotel.name &&
+        savedHotel.destination_code === selectedHotelCode &&
+        savedHotel.check_in_date === hotel.checkInDate &&
+        savedHotel.check_out_date === hotel.checkOutDate &&
+        Number(savedHotel.saved_price) === Number(hotel.price)
+    );
+  }
+
+  async function handleToggleFlight(flight: FlightResult) {
+    /*
+      If the result is already saved, remove it.
+      Otherwise, create a saved-flight row and optionally create its alert.
     */
 
     if (user === null) {
@@ -241,15 +335,33 @@ function TravelPlanningPage() {
       return;
     }
 
-    if (alertPrice !== "" && targetPrice <= 0) {
-      setSaveMessage("Flight alert price must be greater than zero.");
-      return;
-    }
+    const existingSavedFlight = findSavedFlight(flight);
+    const itemKey = `flight-${flight.id}`;
 
     setSaveMessage("");
-    setSavingItemId(flight.id);
+    setSavingItemId(itemKey);
 
     try {
+      if (existingSavedFlight) {
+        // Remove the saved row from PostgreSQL.
+        await deleteSavedFlight(existingSavedFlight.id);
+
+        // Keep frontend state synchronized with the database.
+        setSavedFlights((currentFlights) =>
+          currentFlights.filter(
+            (savedFlight) => savedFlight.id !== existingSavedFlight.id
+          )
+        );
+
+        setSaveMessage("Flight removed from Saved Travel.");
+        return;
+      }
+
+      if (alertPrice !== "" && targetPrice <= 0) {
+        setSaveMessage("Flight alert price must be greater than zero.");
+        return;
+      }
+
       const savedFlight = await saveFlight({
         origin_code: selectedOriginCode,
         origin_name: originInput,
@@ -265,7 +377,12 @@ function TravelPlanningPage() {
         provider: "duffel",
       });
 
-      // Create an alert only when the user entered a target price.
+      // Add the returned database record immediately.
+      setSavedFlights((currentFlights) => [
+        savedFlight,
+        ...currentFlights,
+      ]);
+
       if (targetPrice > 0) {
         await createFlightPriceAlert(savedFlight.id, targetPrice);
 
@@ -279,69 +396,89 @@ function TravelPlanningPage() {
       if (error instanceof Error) {
         setSaveMessage(error.message);
       } else {
-        setSaveMessage("Unable to save flight.");
+        setSaveMessage("Unable to update saved flight.");
       }
     } finally {
       setSavingItemId(null);
     }
   }
   
-  async function handleSaveHotel(hotel: HotelResult) {
-  /*
-    Saves the selected hotel first.
+ async function handleToggleHotel(hotel: HotelResult) {
+    /*
+      Toggles the selected hotel between saved and unsaved.
+    */
 
-    When the user entered a valid target price, an alert is then linked
-    to the newly created saved_hotels row.
-  */
-
-  if (user === null) {
-    setSaveMessage("Please log in to save this hotel.");
-    return;
-  }
-
-  if (hotelAlertPrice !== "" && hotelTargetPrice <= 0) {
-    setSaveMessage("Hotel alert price must be greater than zero.");
-    return;
-  }
-
-  setSaveMessage("");
-  setSavingItemId(hotel.id);
-
-  try {
-    const savedHotel = await saveHotel({
-      destination_code: selectedHotelCode,
-      destination_name: hotelDestinationInput,
-      hotel_name: hotel.name,
-      city: hotel.city,
-      country: hotel.country,
-      rating: hotel.rating,
-      price: hotel.price,
-      currency: hotel.currency,
-      check_in_date: hotel.checkInDate,
-      check_out_date: hotel.checkOutDate,
-      provider: "liteapi",
-    });
-
-    // Create an alert only when the user entered a target price.
-    if (hotelTargetPrice > 0) {
-      await createHotelPriceAlert(savedHotel.id, hotelTargetPrice);
-
-      setSaveMessage(
-        `Hotel saved. Price alert set for ${hotel.currency} ${hotelTargetPrice}.`
-      );
-    } else {
-      setSaveMessage("Hotel saved successfully.");
+    if (user === null) {
+      setSaveMessage("Please log in to save this hotel.");
+      return;
     }
-  } catch (error) {
-    if (error instanceof Error) {
-      setSaveMessage(error.message);
-    } else {
-      setSaveMessage("Unable to save hotel.");
+
+    const existingSavedHotel = findSavedHotel(hotel);
+    const itemKey = `hotel-${hotel.id}`;
+
+    setSaveMessage("");
+    setSavingItemId(itemKey);
+
+    try {
+      if (existingSavedHotel) {
+        await deleteSavedHotel(existingSavedHotel.id);
+
+        setSavedHotels((currentHotels) =>
+          currentHotels.filter(
+            (savedHotel) => savedHotel.id !== existingSavedHotel.id
+          )
+        );
+
+        setSaveMessage("Hotel removed from Saved Travel.");
+        return;
+      }
+
+      if (hotelAlertPrice !== "" && hotelTargetPrice <= 0) {
+        setSaveMessage("Hotel alert price must be greater than zero.");
+        return;
+      }
+
+      const savedHotel = await saveHotel({
+        destination_code: selectedHotelCode,
+        destination_name: hotelDestinationInput,
+        hotel_name: hotel.name,
+        city: hotel.city,
+        country: hotel.country,
+        rating: hotel.rating,
+        price: hotel.price,
+        currency: hotel.currency,
+        check_in_date: hotel.checkInDate,
+        check_out_date: hotel.checkOutDate,
+        provider: "liteapi",
+      });
+
+      setSavedHotels((currentHotels) => [
+        savedHotel,
+        ...currentHotels,
+      ]);
+
+      if (hotelTargetPrice > 0) {
+        await createHotelPriceAlert(
+          savedHotel.id,
+          hotelTargetPrice
+        );
+
+        setSaveMessage(
+          `Hotel saved. Price alert set for ${hotel.currency} ${hotelTargetPrice}.`
+        );
+      } else {
+        setSaveMessage("Hotel saved successfully.");
+      }
+    } catch (error) {
+      if (error instanceof Error) {
+        setSaveMessage(error.message);
+      } else {
+        setSaveMessage("Unable to update saved hotel.");
+      }
+    } finally {
+      setSavingItemId(null);
     }
-  } finally {
-    setSavingItemId(null);
   }
-}
 
   function renderSuggestions(target: SuggestionTarget) {
     if (activeSuggestionTarget !== target) {
@@ -675,13 +812,19 @@ function TravelPlanningPage() {
 
             <div className="grid gap-4">
               {flights.map((flight) => {
-                const isBelowTarget =
-                  targetPrice > 0 && flight.price <= targetPrice;
+                const savedFlight = findSavedFlight(flight);
+                const isSaved = savedFlight !== undefined;
+                const itemKey = `flight-${flight.id}`;
+                const isBelowTarget = targetPrice > 0 && flight.price <= targetPrice;
 
                 return (
                   <div
                     key={flight.id}
-                    className="flex flex-col gap-4 rounded-2xl border border-slate-800 bg-slate-900 p-5 md:flex-row md:items-center md:justify-between"
+                    className={`flex flex-col gap-4 rounded-2xl border p-5 transition md:flex-row md:items-center md:justify-between ${
+                      isSaved
+                        ? "border-green-500/60 bg-green-500/10"
+                        : "border-slate-800 bg-slate-900"
+                    }`}
                   >
                     <div>
                       <h3 className="text-lg font-semibold">
@@ -716,11 +859,21 @@ function TravelPlanningPage() {
 
                       <button
                         type="button"
-                        onClick={() => handleSaveFlight(flight)}
-                        disabled={savingItemId === flight.id}
-                        className="mt-3 rounded-lg border border-amber-500 px-4 py-2 text-sm font-semibold text-amber-400 transition hover:bg-amber-500 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-60"
+                        onClick={() => handleToggleFlight(flight)}
+                        disabled={savingItemId === itemKey}
+                        className={`mt-3 rounded-lg border px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                          isSaved
+                            ? "border-green-500 bg-green-500 text-slate-950 hover:bg-green-400"
+                            : "border-amber-500 text-amber-400 hover:bg-amber-500 hover:text-slate-950"
+                        }`}
                       >
-                        {savingItemId === flight.id ? "Saving..." : "Save flight"}
+                        {savingItemId === itemKey
+                          ? isSaved
+                            ? "Removing..."
+                            : "Saving..."
+                          : isSaved
+                            ? "Flight saved"
+                            : "Save flight"}
                       </button>
                     </div>
                   </div>
@@ -729,7 +882,7 @@ function TravelPlanningPage() {
 
               {!isLoading && flights.length === 0 && (
                 <p className="text-slate-400">
-                  No flights found yet. Try searching Singapore to Tokyo.
+                  No flights found.
                 </p>
               )}
             </div>
@@ -749,13 +902,19 @@ function TravelPlanningPage() {
 
             <div className="grid gap-4">
               {hotels.map((hotel) => {
-                const isBelowTarget =
-                  hotelTargetPrice > 0 && hotel.price <= hotelTargetPrice;
+                const savedHotel = findSavedHotel(hotel);
+                const isSaved = savedHotel !== undefined;
+                const itemKey = `hotel-${hotel.id}`;
+                const isBelowTarget = hotelTargetPrice > 0 && hotel.price <= hotelTargetPrice;
 
                 return (
                   <div
                     key={hotel.id}
-                    className="flex flex-col gap-4 rounded-2xl border border-slate-800 bg-slate-900 p-5 md:flex-row md:items-center md:justify-between"
+                    className={`flex flex-col gap-4 rounded-2xl border p-5 transition md:flex-row md:items-center md:justify-between ${
+                    isSaved
+                      ? "border-green-500/60 bg-green-500/10"
+                      : "border-slate-800 bg-slate-900"
+                  }`}
                   >
                     <div>
                       <h3 className="text-lg font-semibold">{hotel.name}</h3>
@@ -791,11 +950,21 @@ function TravelPlanningPage() {
 
                       <button
                         type="button"
-                        onClick={() => handleSaveHotel(hotel)}
-                        disabled={savingItemId === hotel.id}
-                        className="mt-3 rounded-lg border border-amber-500 px-4 py-2 text-sm font-semibold text-amber-400 transition hover:bg-amber-500 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-60"
+                        onClick={() => handleToggleHotel(hotel)}
+                        disabled={savingItemId === itemKey}
+                        className={`mt-3 rounded-lg border px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                          isSaved
+                            ? "border-green-500 bg-green-500 text-slate-950 hover:bg-green-400"
+                            : "border-amber-500 text-amber-400 hover:bg-amber-500 hover:text-slate-950"
+                        }`}
                       >
-                        {savingItemId === hotel.id ? "Saving..." : "Save hotel"}
+                        {savingItemId === itemKey
+                          ? isSaved
+                            ? "Removing..."
+                            : "Saving..."
+                          : isSaved
+                            ? "Hotel saved"
+                            : "Save hotel"}
                       </button>
                     </div>
                   </div>
@@ -804,7 +973,7 @@ function TravelPlanningPage() {
 
               {!isLoading && hotels.length === 0 && (
                 <p className="text-slate-400">
-                  No hotels found yet. Try searching Tokyo.
+                  No hotels found.
                 </p>
               )}
             </div>

@@ -145,3 +145,49 @@ export async function refreshSavedHotel(
 
   return response.json();
 }
+
+
+export async function deleteSavedFlight(
+  savedFlightId: number
+): Promise<{ message: string; deletedId: number }> {
+  /*
+    Removes one saved flight from the logged-in user's account.
+  */
+
+  const response = await fetch(
+    `${API_BASE_URL}/saved-travel/flights/${savedFlightId}`,
+    {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(await getSavedTravelErrorMessage(response));
+  }
+
+  return response.json();
+}
+
+
+export async function deleteSavedHotel(
+  savedHotelId: number
+): Promise<{ message: string; deletedId: number }> {
+  /*
+    Removes one saved hotel from the logged-in user's account.
+  */
+
+  const response = await fetch(
+    `${API_BASE_URL}/saved-travel/hotels/${savedHotelId}`,
+    {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(await getSavedTravelErrorMessage(response));
+  }
+
+  return response.json();
+}
