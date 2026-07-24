@@ -5,6 +5,8 @@ from pydantic import BaseModel
 
 from app.services.auth_service import User, get_current_active_user
 from app.services.saved_travel_service import (
+    delete_saved_flight_for_user,
+    delete_saved_hotel_for_user,
     get_saved_flights_for_user,
     get_saved_hotels_for_user,
     refresh_saved_flight_price,
@@ -142,6 +144,36 @@ def refresh_hotel_price(
     """
 
     return refresh_saved_hotel_price(
+        username=current_user.username,
+        saved_hotel_id=saved_hotel_id,
+    )
+
+
+@router.delete("/flights/{saved_flight_id}")
+def delete_saved_flight(
+    saved_flight_id: int,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+):
+    """
+    Deletes one saved flight belonging to the logged-in user.
+    """
+
+    return delete_saved_flight_for_user(
+        username=current_user.username,
+        saved_flight_id=saved_flight_id,
+    )
+
+
+@router.delete("/hotels/{saved_hotel_id}")
+def delete_saved_hotel(
+    saved_hotel_id: int,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+):
+    """
+    Deletes one saved hotel belonging to the logged-in user.
+    """
+
+    return delete_saved_hotel_for_user(
         username=current_user.username,
         saved_hotel_id=saved_hotel_id,
     )

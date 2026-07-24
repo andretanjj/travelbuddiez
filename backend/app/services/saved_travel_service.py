@@ -448,3 +448,127 @@ def refresh_saved_hotel_price(username: str, saved_hotel_id: int):
     finally:
         cur.close()
         conn.close()
+
+
+def delete_saved_flight_for_user(
+    username: str,
+    saved_flight_id: int,
+):
+    """
+    Deletes one saved flight belonging to the logged-in user.
+
+    Any linked price alert is removed automatically because the
+    price_alerts foreign key uses ON DELETE CASCADE.
+    """
+
+    user_id = get_user_id_by_username(username)
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+        cur.execute(
+            """
+            DELETE FROM saved_flights
+            WHERE id = %s
+              AND user_id = %s
+            RETURNING id;
+            """,
+            (
+                saved_flight_id,
+                user_id,
+            ),
+        )
+
+        deleted_flight = cur.fetchone()
+
+        if deleted_flight is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Saved flight not found",
+            )
+
+        conn.commit()
+
+        return {
+            "message": "Saved flight deleted successfully",
+            "deletedId": deleted_flight["id"],
+        }
+
+    except HTTPException:
+        conn.rollback()
+        raise
+
+    except Exception as error:
+        conn.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(error),
+        )
+
+    finally:
+        cur.close()
+        conn.close()
+
+
+def delete_saved_hotel_for_user(
+    username: str,
+    saved_hotel_id: int,
+):
+    """
+    Deletes one saved hotel belonging to the logged-in user.
+
+    Any linked price alert is removed automatically because the
+    price_alerts foreign key uses ON DELETE CASCADE.
+    """
+
+    user_id = get_user_id_by_username(username)
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+        cur.execute(
+            """
+            DELETE FROM saved_hotels
+            WHERE id = %s
+              AND user_id = %s
+            RETURNING id;
+            """,
+            (
+                saved_hotel_id,
+                user_id,
+            ),
+        )
+
+        deleted_hotel = cur.fetchone()
+
+        if deleted_hotel is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Saved hotel not found",
+            )
+
+        conn.commit()
+
+        return {
+            "message": "Saved hotel deleted successfully",
+            "deletedId": deleted_hotel["id"],
+        }
+
+    except HTTPException:
+        conn.rollback()
+        raise
+
+    except Exception as error:
+        conn.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(error),
+        )
+
+    finally:
+        cur.close()
+        conn.close()
