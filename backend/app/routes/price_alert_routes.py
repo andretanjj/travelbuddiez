@@ -11,6 +11,7 @@ from app.services.price_alert_service import (
     get_price_alerts_for_user,
 )
 
+from app.services.email_service import send_price_alert_email
 
 router = APIRouter(
     prefix="/price-alerts",
@@ -90,3 +91,28 @@ def deactivate_alert(
         username=current_user.username,
         alert_id=alert_id,
     )
+
+
+@router.post("/test-email")
+def send_test_price_alert_email(
+    current_user: Annotated[User, Depends(get_current_active_user)],
+):
+    """
+    Temporary development endpoint for verifying Resend integration.
+
+    Remove this endpoint after email delivery is confirmed.
+    """
+
+    email_id = send_price_alert_email(
+        recipient_email="travelbuddiez.orbital26@gmail.com",
+        item_type="flight",
+        item_name="Singapore to Tokyo",
+        current_price=178.00,
+        target_price=300.00,
+        currency="USD",
+    )
+
+    return {
+        "message": "Test email sent",
+        "emailId": email_id,
+    }
