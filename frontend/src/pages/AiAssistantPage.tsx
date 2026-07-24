@@ -64,27 +64,27 @@ export default function AiAssistantPage() {
     function buildPrompt(): string {
         const promptParts = [
             destination
-                && `Destination: ${destination.trim()}`,
+            && `Destination: ${destination.trim()}`,
 
             origin
-                && `Departure airport: ${origin.trim().toUpperCase()}`,
+            && `Departure airport: ${origin.trim().toUpperCase()}`,
 
             departureDate
-                && `Departure date: ${departureDate}`,
+            && `Departure date: ${departureDate}`,
 
             returnDate
-                && `Return date: ${returnDate}`,
+            && `Return date: ${returnDate}`,
 
             `Travellers: ${travellers}`,
 
             interests
-                && `Travel interests: ${interests.trim()}`,
+            && `Travel interests: ${interests.trim()}`,
 
             concerns
-                && `Travel concerns: ${concerns.trim()}`,
+            && `Travel concerns: ${concerns.trim()}`,
 
             question
-                && `Question: ${question.trim()}`,
+            && `Question: ${question.trim()}`,
         ];
 
         return promptParts
@@ -140,7 +140,7 @@ export default function AiAssistantPage() {
             const data: AssistantResponse =
                 await sendMessageToAiAssistant({
                     message: prompt,
-                   travel_preferences: travelPreferences,
+                    travel_preferences: travelPreferences,
                 });
 
             setMessages((currentMessages) => [
@@ -163,6 +163,11 @@ export default function AiAssistantPage() {
                 && caughtError.message === "LOGIN_REQUIRED"
             ) {
                 navigate("/login");
+                return;
+            }
+
+            if (caughtError instanceof Error) {
+                setError(caughtError.message);
                 return;
             }
 
@@ -352,9 +357,16 @@ export default function AiAssistantPage() {
                         </div>
 
                         {error && (
-                            <p className="text-sm text-red-400">
+                            <div
+                                role="alert"
+                                className="
+                                    rounded-xl border border-red-400/20
+                                    bg-red-400/10 px-4 py-3
+                                    text-sm leading-6 text-red-300
+                                "
+                            >
                                 {error}
-                            </p>
+                            </div>
                         )}
 
                         <button
