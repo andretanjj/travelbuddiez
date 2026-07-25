@@ -6,6 +6,12 @@ from app.services.advisory_service import fetch_us_travel_advisories
 # Used to check whether stored destination data is still fresh.
 from datetime import datetime, timedelta, timezone
 
+import logging
+
+# Reuse Uvicorn's configured logger so messages appear in the
+# VS Code terminal running the FastAPI server.
+logger = logging.getLogger("uvicorn.error")
+
 def format_embedding_for_pgvector(embedding):
     """
     Converts Python list embedding into pgvector string format.
@@ -104,16 +110,24 @@ def update_all_destinations():
         cur.close()
         conn.close()
 
-def update_one_destination(country_code: str):
-    # updates for 1 destination
-    # used by: PUT /destinations/{country_code}/update
 
-    country_code = country_code.upper() 
-    conn = get_connection() 
-    cur = conn.cursor() 
+def update_one_destination(country_code: str):
+    # Updates one destination.
+    # Used by: PUT /destinations/{country_code}/update
+
+    country_code = country_code.upper()
+
+    logger.info(
+        "[DESTINATION REFRESH] Loading destination metadata for %s",
+        country_code,
+    )
+
+    conn = get_connection()
+    cur = conn.cursor()
 
     try:
-        cur.execute("""
+        cur.execute(
+            """
             SELECT
                 id,
                 country_code AS "countryCode",
@@ -122,26 +136,72 @@ def update_one_destination(country_code: str):
                 news_code AS "newsCode"
             FROM destinations
             WHERE country_code = %s;
-        """, (country_code,))
+            """,
+            (country_code,),
+        )
 
         destination = cur.fetchone()
 
         if destination is None:
+            logger.warning(
+                "[DESTINATION REFRESH] Destination %s was not found",
+                country_code,
+            )
+
             raise ValueError("Destination not found")
 
+        logger.info(
+            "[DESTINATION REFRESH] Fetching advisory, weather and news "
+            "data for %s (%s)",
+            destination["country"],
+            country_code,
+        )
+
         advisory_map = fetch_us_travel_advisories()
-        updated_data = build_updated_destinations(destination, advisory_map)
 
-        updated_score = upsert_destination_score(cur, destination["id"], updated_data)
+        updated_data = build_updated_destinations(
+            destination,
+            advisory_map,
+        )
 
-        upsert_news_articles(cur, destination["id"], updated_data["newsArticles"])
+        logger.info(
+            "[DESTINATION REFRESH] External data processing completed "
+            "for %s. Updating destination_scores and news_articles.",
+            country_code,
+        )
+
+        updated_score = upsert_destination_score(
+            cur,
+            destination["id"],
+            updated_data,
+        )
+
+        upsert_news_articles(
+            cur,
+            destination["id"],
+            updated_data["newsArticles"],
+        )
 
         conn.commit()
+
+        logger.info(
+            "[DESTINATION REFRESH] Database update committed successfully "
+            "for %s",
+            country_code,
+        )
+
         return updated_score
 
     except Exception as error:
         conn.rollback()
-        raise error
+
+        logger.exception(
+            "[DESTINATION REFRESH] Refresh failed for %s: %s",
+            country_code,
+            error,
+        )
+
+        raise
 
     finally:
         cur.close()
@@ -167,6 +227,11 @@ def refresh_destination_if_needed(
 
     country_code = country_code.upper()
 
+    logger.info(
+        "[DESTINATION CACHE] Checking cached dashboard data for %s",
+        country_code,
+    )
+
     conn = get_connection()
     cur = conn.cursor()
 
@@ -175,6 +240,8 @@ def refresh_destination_if_needed(
             """
             SELECT
                 d.id,
+                d.country_name AS "countryName",
+                ds.id AS "scoreId",
                 ds.last_updated AS "lastUpdated"
             FROM destinations d
             LEFT JOIN destination_scores ds
@@ -187,12 +254,71 @@ def refresh_destination_if_needed(
         destination = cur.fetchone()
 
         if destination is None:
+            logger.warning(
+                "[DESTINATION CACHE] Destination %s does not exist "
+                "in the destinations table.",
+                country_code,
+            )
+
             raise ValueError("Destination not found")
 
-        needs_refresh = destination_score_needs_refresh(
-            destination["lastUpdated"],
-            refresh_after_hours=refresh_after_hours,
-        )
+        last_updated = destination["lastUpdated"]
+        score_id = destination["scoreId"]
+
+        # A destination exists, but no destination_scores row has been created.
+        if score_id is None:
+            logger.info(
+                "[DESTINATION CACHE] No cached score exists for %s (%s). "
+                "Proceeding to fetch external APIs.",
+                destination["countryName"],
+                country_code,
+            )
+
+            needs_refresh = True
+
+        # A score row exists but its last_updated value is missing.
+        elif last_updated is None:
+            logger.info(
+                "[DESTINATION CACHE] Cached score for %s (%s) has no "
+                "last_updated timestamp. Proceeding to fetch external APIs.",
+                destination["countryName"],
+                country_code,
+            )
+
+            needs_refresh = True
+
+        else:
+            needs_refresh = destination_score_needs_refresh(
+                last_updated,
+                refresh_after_hours=refresh_after_hours,
+            )
+
+            if needs_refresh:
+                cache_age = datetime.now(timezone.utc) - (
+                    last_updated
+                    if last_updated.tzinfo is not None
+                    else last_updated.replace(tzinfo=timezone.utc)
+                )
+
+                logger.info(
+                    "[DESTINATION CACHE] Cached data for %s (%s) is stale. "
+                    "Last updated: %s. Cache age: %.2f hours. "
+                    "Proceeding to fetch external APIs.",
+                    destination["countryName"],
+                    country_code,
+                    last_updated.isoformat(),
+                    cache_age.total_seconds() / 3600,
+                )
+
+            else:
+                logger.info(
+                    "[DESTINATION CACHE] Cached data for %s (%s) is fresh. "
+                    "Last updated: %s. Returning database results without "
+                    "calling external APIs.",
+                    destination["countryName"],
+                    country_code,
+                    last_updated.isoformat(),
+                )
 
     finally:
         # This connection only performs a read.
@@ -202,8 +328,19 @@ def refresh_destination_if_needed(
     if not needs_refresh:
         return False
 
+    logger.info(
+        "[DESTINATION REFRESH] Starting external API refresh for %s",
+        country_code,
+    )
+
     # update_one_destination opens its own connection and transaction.
     update_one_destination(country_code)
+
+    logger.info(
+        "[DESTINATION REFRESH] External API refresh completed and cached "
+        "data was updated for %s",
+        country_code,
+    )
 
     return True
 
