@@ -1,5 +1,8 @@
+import logging
 import os
 import requests
+
+logger = logging.getLogger("uvicorn.error")
 
 
 DUFFEL_API_TOKEN = os.getenv("DUFFEL_API_TOKEN")
@@ -97,6 +100,14 @@ def search_duffel_flights(origin: str, destination: str, departure_date: str, ad
     if not DUFFEL_API_TOKEN:
         raise RuntimeError("DUFFEL_API_TOKEN is missing")
 
+    logger.info(
+        "[DUFFEL] Calling live Duffel API: %s → %s, date=%s, adults=%s",
+        origin.upper(),
+        destination.upper(),
+        departure_date,
+        adults,
+    )
+
     url = f"{DUFFEL_BASE_URL}/air/offer_requests"
 
     headers = {
@@ -121,24 +132,65 @@ def search_duffel_flights(origin: str, destination: str, departure_date: str, ad
 
     response = requests.post(url, headers=headers, json=payload, timeout=20)
 
+    logger.info(
+        "[DUFFEL] HTTP response received with status %s",
+        response.status_code,
+    )
+
     if not response.ok:
-        # Raise a useful error so the caller can fallback to mock data.
-        raise RuntimeError(f"Duffel request failed: {response.status_code} {response.text}")
+        logger.error(
+            "[DUFFEL] Live API request failed with status %s",
+            response.status_code,
+        )
+
+        raise RuntimeError(
+            f"Duffel request failed: "
+            f"{response.status_code} {response.text}"
+        )
 
     response_data = response.json()
 
     offers = response_data["data"].get("offers", [])
 
+    logger.info(
+        "[DUFFEL] Live API returned %s raw offer(s)",
+        len(offers),
+    )
+
     normalised_offers = []
 
-    for offer in offers[:10]:
-        normalised_offer = normalise_duffel_offer(
-            offer
-        )
+    for offer in offers[:20]:
+        try:
+            owner = offer.get("owner", {})
+            owner_name = owner.get("name", "")
+            owner_iata_code = owner.get("iata_code", "")
 
-        if normalised_offer["price"] > 0:
-            normalised_offers.append(
-                normalised_offer
+            # Duffel Airways is a sandbox airline used for test-mode integration.
+            # Exclude it from TravelBuddiez user-facing search results.
+            if owner_name == "Duffel Airways" or owner_iata_code == "ZZ":
+                logger.info(
+                    "[DUFFEL] Skipping sandbox offer from Duffel Airways: %s",
+                    offer.get("id"),
+                )
+                continue
+
+            normalised_offer = normalise_duffel_offer(offer)
+
+            if normalised_offer["price"] > 0:
+                normalised_offers.append(normalised_offer)
+
+        except Exception as error:
+            logger.exception(
+                "[DUFFEL] Failed to normalise offer %s: %s",
+                offer.get("id"),
+                error,
             )
 
-    return sorted(normalised_offers, key=lambda flight: flight["price"])
+    sorted_offers = sorted(normalised_offers,key=lambda flight: flight["price"])
+
+    logger.info(
+        "[DUFFEL] Successfully normalised %s live flight offer(s)",
+        len(sorted_offers),
+    )
+
+    return sorted_offers

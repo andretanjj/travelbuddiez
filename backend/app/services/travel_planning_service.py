@@ -1,5 +1,9 @@
+import logging
+
 from app.services.duffel_flight_service import search_duffel_flights
 from app.services.liteapi_hotel_service import search_liteapi_hotels
+
+logger = logging.getLogger("uvicorn.error")
 
 """
 Temp backend mock service for travel planning.
@@ -8,28 +12,46 @@ Temp backend mock service for travel planning.
 - Fallback data if APIs are unavail.
 """
 
-def search_flights(origin: str, destination: str, departure_date: str, adults: int):
+def search_flights(
+    origin: str,
+    destination: str,
+    departure_date: str,
+    adults: int,
+):
     """
-    Searches flights for the Travel Planning page.
+    Tries the live Duffel API first.
 
-    Current:
-    - Tries Duffel first.
-    - Falls back to backend mock data if Duffel fails.
-
-    This keeps the Orbital demo reliable even if the external API is down.
+    Mock data is returned only when the live provider raises an error.
     """
+
+    logger.info(
+        "[FLIGHT SEARCH] Attempting live Duffel search for %s → %s",
+        origin.upper(),
+        destination.upper(),
+    )
 
     try:
-        return search_duffel_flights(
+        live_flights = search_duffel_flights(
             origin=origin,
             destination=destination,
             departure_date=departure_date,
             adults=adults,
         )
+
+        logger.info(
+            "[FLIGHT SEARCH] Live Duffel search succeeded. "
+            "Using %s live result(s); mock fallback was not used.",
+            len(live_flights),
+        )
+
+        return live_flights
+
     except Exception as error:
-        # Fallback is intentional for demo use.
-        # This also helps during development if Duffel token/config is wrong.
-        print("Duffel flight search failed. Falling back to mock data:", error)
+        logger.exception(
+            "[FLIGHT SEARCH] Duffel search failed: %s. "
+            "Proceeding to mock fallback data.",
+            error,
+        )
 
     mock_flights = [
         {
@@ -75,30 +97,58 @@ def search_flights(origin: str, destination: str, departure_date: str, adults: i
         ):
             filtered_flights.append(flight)
 
-    return sorted(filtered_flights, key=lambda flight: flight["price"])
+    fallback_results = sorted(
+        filtered_flights,
+        key=lambda flight: flight["price"],
+    )
 
-def search_hotels(city: str, check_in_date: str, check_out_date: str, adults: int):
+    logger.warning(
+        "[FLIGHT SEARCH] Returning %s mock fallback flight result(s)",
+        len(fallback_results),
+    )
+
+    return fallback_results
+
+
+def search_hotels(
+    city: str,
+    check_in_date: str,
+    check_out_date: str,
+    adults: int,
+):
     """
-    Searches hotels for the Travel Planning page.
+    Tries the live LiteAPI service first.
 
-    Current:
-    - Tries LiteAPI first.
-    - Falls back to backend mock hotel data if LiteAPI fails.
-
-    This keeps the Orbital demo reliable even if the external API is down.
+    Mock data is returned only when the live provider raises an error.
     """
+
+    logger.info(
+        "[HOTEL SEARCH] Attempting live LiteAPI search for %s",
+        city.upper(),
+    )
 
     try:
-        return search_liteapi_hotels(
+        live_hotels = search_liteapi_hotels(
             city=city,
             check_in_date=check_in_date,
             check_out_date=check_out_date,
             adults=adults,
         )
+
+        logger.info(
+            "[HOTEL SEARCH] Live LiteAPI search succeeded. "
+            "Using %s live result(s); mock fallback was not used.",
+            len(live_hotels),
+        )
+
+        return live_hotels
+
     except Exception as error:
-        # Fallback is intentional for demo reliability.
-        # This also helps during development if LiteAPI token/config is wrong.
-        print("LiteAPI hotel search failed. Falling back to mock data:", error)
+        logger.exception(
+            "[HOTEL SEARCH] LiteAPI search failed: %s. "
+            "Proceeding to mock fallback data.",
+            error,
+        )
 
     mock_hotels = [
         {
@@ -128,10 +178,22 @@ def search_hotels(city: str, check_in_date: str, check_out_date: str, adults: in
     filtered_hotels = []
 
     for hotel in mock_hotels:
-        search_text = f"{hotel['name']} {hotel['city']} {hotel['country']}".lower()
+        search_text = (
+            f"{hotel['name']} {hotel['city']} {hotel['country']}"
+        ).lower()
 
         if city.lower() in search_text:
             filtered_hotels.append(hotel)
 
-    return sorted(filtered_hotels, key=lambda hotel: hotel["price"])
+    fallback_results = sorted(
+        filtered_hotels,
+        key=lambda hotel: hotel["price"],
+    )
+
+    logger.warning(
+        "[HOTEL SEARCH] Returning %s mock fallback hotel result(s)",
+        len(fallback_results),
+    )
+
+    return fallback_results
 

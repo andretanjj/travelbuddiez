@@ -1,5 +1,8 @@
+import logging
 import os
 import requests
+
+logger = logging.getLogger("uvicorn.error")
 
 
 LITEAPI_API_KEY = os.getenv("LITEAPI_API_KEY")
@@ -76,7 +79,13 @@ def fetch_liteapi_hotel_details(hotel_id: str):
     )
 
     if not response.ok:
-        print(f"LiteAPI hotel metadata failed for {hotel_id}: {response.status_code} {response.text}")
+        logger.warning(
+            "[LITEAPI] Hotel metadata request failed for hotel %s "
+            "with status %s. Using fallback hotel labels.",
+            hotel_id,
+            response.status_code,
+        )
+
         return None
 
     response_data = response.json()
@@ -165,6 +174,15 @@ def search_liteapi_hotels(city: str, check_in_date: str, check_out_date: str, ad
     if not LITEAPI_API_KEY:
         raise RuntimeError("LITEAPI_API_KEY is missing")
 
+    logger.info(
+        "[LITEAPI] Calling live hotel rates API: destination=%s, "
+        "check-in=%s, check-out=%s, adults=%s",
+        city.upper(),
+        check_in_date,
+        check_out_date,
+        adults,
+    )
+
     rates_url = f"{LITEAPI_BASE_URL}/hotels/rates"
 
     payload = {
@@ -195,9 +213,20 @@ def search_liteapi_hotels(city: str, check_in_date: str, check_out_date: str, ad
         timeout=20,
     )
 
+    logger.info(
+        "[LITEAPI] Hotel rates HTTP response received with status %s",
+        rates_response.status_code,
+    )
+
     if not rates_response.ok:
+        logger.error(
+            "[LITEAPI] Live hotel rates request failed with status %s",
+            rates_response.status_code,
+        )
+
         raise RuntimeError(
-            f"LiteAPI hotel rates request failed: {rates_response.status_code} {rates_response.text}"
+            f"LiteAPI hotel rates request failed: "
+            f"{rates_response.status_code} {rates_response.text}"
         )
 
     rates_data = rates_response.json()
@@ -209,6 +238,11 @@ def search_liteapi_hotels(city: str, check_in_date: str, check_out_date: str, ad
         or []
     )
 
+    logger.info(
+        "[LITEAPI] Live API returned %s hotel rate result(s)",
+        len(hotel_rates),
+    )
+
     normalised_hotels = []
 
     for hotel_rate in hotel_rates[:10]:
@@ -217,6 +251,10 @@ def search_liteapi_hotels(city: str, check_in_date: str, check_out_date: str, ad
         hotel_details = None
 
         if hotel_id:
+            logger.info(
+            "[LITEAPI] Fetching live metadata for hotel %s",
+            hotel_id,
+        )
             hotel_details = fetch_liteapi_hotel_details(
                 str(hotel_id)
             )
@@ -234,4 +272,11 @@ def search_liteapi_hotels(city: str, check_in_date: str, check_out_date: str, ad
                 normalised_hotel
             )
 
-    return sorted(normalised_hotels, key=lambda hotel: hotel["price"])
+    sorted_hotels = sorted(normalised_hotels, key=lambda hotel: hotel["price"])
+
+    logger.info(
+        "[LITEAPI] Successfully normalised %s live hotel result(s)",
+        len(sorted_hotels),
+    )
+
+    return sorted_hotels
