@@ -23,10 +23,7 @@ router = APIRouter(
 
 
 class SaveFlightRequest(BaseModel):
-    """
-    Flight snapshot sent from the frontend when user clicks Save.
-    """
-
+    provider_item_id: str
     origin_code: str
     origin_name: str
     destination_code: str
@@ -36,16 +33,15 @@ class SaveFlightRequest(BaseModel):
     price: float
     currency: str
     airline: str
+    flight_number: str | None = None
+    departure_at: str | None = None
     duration: str
     stops: str
     provider: str = "duffel"
 
 
 class SaveHotelRequest(BaseModel):
-    """
-    Hotel snapshot sent from the frontend when user clicks Save.
-    """
-
+    provider_item_id: str
     destination_code: str
     destination_name: str
     hotel_name: str

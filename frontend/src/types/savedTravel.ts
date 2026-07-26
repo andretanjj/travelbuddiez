@@ -1,6 +1,3 @@
-// Types for saved travel snapshots.
-// These match the backend /saved-travel routes.
-
 export type PriceStatus =
   | "saved_only"
   | "price_dropped"
@@ -9,6 +6,7 @@ export type PriceStatus =
   | "unavailable";
 
 export interface SaveFlightRequest {
+  provider_item_id: string;
   origin_code: string;
   origin_name: string;
   destination_code: string;
@@ -18,12 +16,15 @@ export interface SaveFlightRequest {
   price: number;
   currency: string;
   airline: string;
+  flight_number: string | null;
+  departure_at: string | null;
   duration: string;
   stops: string;
   provider: string;
 }
 
 export interface SaveHotelRequest {
+  provider_item_id: string;
   destination_code: string;
   destination_name: string;
   hotel_name: string;

@@ -5,12 +5,15 @@ export type ActiveTravelTab = "flights" | "hotels";
 
 export interface FlightResult {
   id: string;
+  providerItemId: string;
   city: string;
   country: string;
   route: string;
   price: number;
   currency: string;
   airline: string;
+  flightNumber: string | null;
+  departureAt: string | null;
   duration: string;
   stops: string;
   departureDate: string;

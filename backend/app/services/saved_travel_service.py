@@ -9,6 +9,27 @@ from app.services.price_alert_service import evaluate_flight_alerts, evaluate_ho
 
 from app.services.user_service import get_user_id_by_username
 
+from datetime import datetime
+
+
+def parse_provider_datetime(value):
+    """
+    Converts database or provider datetime values into Python datetime objects.
+
+    Duffel commonly returns ISO 8601 strings ending in Z.
+    PostgreSQL may return a datetime object directly.
+    """
+
+    if value is None:
+        return None
+
+    if isinstance(value, datetime):
+        return value
+
+    return datetime.fromisoformat(
+        str(value).replace("Z", "+00:00")
+    )
+
 
 def get_price_status(saved_price: float, current_price: float) -> str:
     """
@@ -42,6 +63,7 @@ def save_flight_for_user(username: str, flight: dict):
             """
             INSERT INTO saved_flights (
                 user_id,
+                provider_item_id,
                 origin,
                 destination,
                 origin_code,
@@ -53,6 +75,8 @@ def save_flight_for_user(username: str, flight: dict):
                 price,
                 provider,
                 airline,
+                flight_number,
+                departure_at,
                 duration,
                 stops,
                 currency,
@@ -64,12 +88,14 @@ def save_flight_for_user(username: str, flight: dict):
             )
             VALUES (
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s, %s, NOW(), NOW(), %s
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                NOW(), NOW(), %s
             )
             RETURNING *;
             """,
             (
                 user_id,
+                flight.provider_item_id,
                 flight.origin_code,
                 flight.destination_code,
                 flight.origin_code,
@@ -81,6 +107,8 @@ def save_flight_for_user(username: str, flight: dict):
                 flight.price,
                 flight.provider,
                 flight.airline,
+                flight.flight_number,
+                flight.departure_at,
                 flight.duration,
                 flight.stops,
                 flight.currency,
@@ -89,7 +117,7 @@ def save_flight_for_user(username: str, flight: dict):
                 "saved_only",
             ),
         )
-
+        
         saved_flight = cur.fetchone()
         conn.commit()
 
@@ -126,6 +154,7 @@ def save_hotel_for_user(username: str, hotel: dict):
             INSERT INTO saved_hotels (
                 user_id,
                 destination_id,
+                provider_item_id,
                 destination_code,
                 destination_name,
                 hotel_name,
@@ -145,12 +174,13 @@ def save_hotel_for_user(username: str, hotel: dict):
             )
             VALUES (
                 %s, NULL, %s, %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, NOW(), NOW(), %s
+                %s, %s, %s, %s, %s, %s, NOW(), NOW(), %s
             )
             RETURNING *;
             """,
             (
                 user_id,
+                hotel.provider_item_id,
                 hotel.destination_code,
                 hotel.destination_name,
                 hotel.hotel_name,
@@ -242,12 +272,21 @@ def get_saved_hotels_for_user(username: str):
         conn.close()
 
 
-def refresh_saved_flight_price(username: str, saved_flight_id: int):
+def refresh_saved_flight_price(
+    username: str,
+    saved_flight_id: int,
+):
     """
-    Refreshes one saved flight price by running the flight search again.
+    Refreshes the same saved flight using stable identifying fields.
 
-    For Orbital scope, we compare the saved item against the cheapest current
-    matching result for the same route/date.
+    Matching fields:
+    - airline
+    - flight number
+    - departure timestamp
+    - origin and destination route
+
+    If the exact flight is not returned, it is marked unavailable instead
+    of using the cheapest different flight.
     """
 
     user_id = get_user_id_by_username(username)
@@ -256,13 +295,18 @@ def refresh_saved_flight_price(username: str, saved_flight_id: int):
     cur = conn.cursor()
 
     try:
+        # Ensure the saved flight belongs to the logged-in user.
         cur.execute(
             """
             SELECT *
             FROM saved_flights
-            WHERE id = %s AND user_id = %s;
+            WHERE id = %s
+              AND user_id = %s;
             """,
-            (saved_flight_id, user_id),
+            (
+                saved_flight_id,
+                user_id,
+            ),
         )
 
         saved_flight = cur.fetchone()
@@ -273,24 +317,77 @@ def refresh_saved_flight_price(username: str, saved_flight_id: int):
                 detail="Saved flight not found",
             )
 
+        # Run a new live search for the same route and date.
         current_results = search_flights(
-            origin=saved_flight["origin_code"] or saved_flight["origin"],
-            destination=saved_flight["destination_code"] or saved_flight["destination"],
-            departure_date=str(saved_flight["departure_date"]),
+            origin=(
+                saved_flight["origin_code"]
+                or saved_flight["origin"]
+            ),
+            destination=(
+                saved_flight["destination_code"]
+                or saved_flight["destination"]
+            ),
+            departure_date=str(
+                saved_flight["departure_date"]
+            ),
             adults=1,
         )
 
-        if len(current_results) == 0:
+        expected_route = (
+            f"{saved_flight['origin_code']} → "
+            f"{saved_flight['destination_code']}"
+        )
+
+        saved_departure_at = parse_provider_datetime(
+            saved_flight["departure_at"]
+        )
+
+        matching_flight = next(
+            (
+                result
+                for result in current_results
+                if (
+                    # Same airline.
+                    result["airline"].strip().lower()
+                    == saved_flight["airline"].strip().lower()
+
+                    # Same marketing flight number.
+                    and result.get("flightNumber")
+                    == saved_flight["flight_number"]
+
+                    # Same scheduled departure timestamp.
+                    and parse_provider_datetime(
+                        result.get("departureAt")
+                    )
+                    == saved_departure_at
+
+                    # Same origin and destination route.
+                    and result["route"].replace(" ", "").lower()
+                    == expected_route.replace(" ", "").lower()
+                )
+            ),
+            None,
+        )
+
+        if matching_flight is None:
+            # Keep the previous known price but mark the exact flight unavailable.
             new_status = "unavailable"
             current_price = saved_flight["current_price"]
+
         else:
-            cheapest_result = current_results[0]
-            current_price = cheapest_result["price"]
-            new_status = get_price_status(
-                saved_price=float(saved_flight["saved_price"] or saved_flight["price"]),
-                current_price=float(current_price),
+            current_price = float(
+                matching_flight["price"]
             )
 
+            new_status = get_price_status(
+                saved_price=float(
+                    saved_flight["saved_price"]
+                    or saved_flight["price"]
+                ),
+                current_price=current_price,
+            )
+
+        # Save the refreshed flight state.
         cur.execute(
             """
             UPDATE saved_flights
@@ -298,7 +395,8 @@ def refresh_saved_flight_price(username: str, saved_flight_id: int):
                 current_price = %s,
                 last_checked_at = NOW(),
                 price_status = %s
-            WHERE id = %s AND user_id = %s
+            WHERE id = %s
+              AND user_id = %s
             RETURNING *;
             """,
             (
@@ -311,7 +409,7 @@ def refresh_saved_flight_price(username: str, saved_flight_id: int):
 
         updated_flight = cur.fetchone()
 
-        # Evaluate any active alert linked to this saved flight.
+        # Re-evaluate any active flight alert.
         evaluate_flight_alerts(
             cur=cur,
             saved_flight_id=saved_flight_id,
@@ -321,11 +419,13 @@ def refresh_saved_flight_price(username: str, saved_flight_id: int):
                 else float(current_price)
             ),
         )
+
         conn.commit()
 
         return dict(updated_flight)
 
     except HTTPException:
+        conn.rollback()
         raise
 
     except Exception as error:
@@ -343,10 +443,10 @@ def refresh_saved_flight_price(username: str, saved_flight_id: int):
 
 def refresh_saved_hotel_price(username: str, saved_hotel_id: int):
     """
-    Refreshes one saved hotel price by searching hotels again.
+    Refreshes the exact saved hotel using LiteAPI's hotel ID.
 
-    LiteAPI may not return the exact same hotel every time, so for Orbital scope
-    we compare against the cheapest current result with the same destination/date.
+    If the same provider hotel ID is not returned, the saved hotel is marked
+    unavailable instead of using another hotel's price.
     """
 
     user_id = get_user_id_by_username(username)
@@ -355,13 +455,18 @@ def refresh_saved_hotel_price(username: str, saved_hotel_id: int):
     cur = conn.cursor()
 
     try:
+        # Ensure the saved hotel belongs to the logged-in user.
         cur.execute(
             """
             SELECT *
             FROM saved_hotels
-            WHERE id = %s AND user_id = %s;
+            WHERE id = %s
+              AND user_id = %s;
             """,
-            (saved_hotel_id, user_id),
+            (
+                saved_hotel_id,
+                user_id,
+            ),
         )
 
         saved_hotel = cur.fetchone()
@@ -372,6 +477,7 @@ def refresh_saved_hotel_price(username: str, saved_hotel_id: int):
                 detail="Saved hotel not found",
             )
 
+        # Run a new live search for the same destination and dates.
         current_results = search_hotels(
             city=saved_hotel["destination_code"],
             check_in_date=str(saved_hotel["check_in_date"]),
@@ -379,17 +485,38 @@ def refresh_saved_hotel_price(username: str, saved_hotel_id: int):
             adults=1,
         )
 
-        if len(current_results) == 0:
-            new_status = "unavailable"
-            current_price = saved_hotel["current_price"]
-        else:
-            cheapest_result = current_results[0]
-            current_price = cheapest_result["price"]
-            new_status = get_price_status(
-                saved_price=float(saved_hotel["saved_price"] or saved_hotel["price"]),
-                current_price=float(current_price),
+        matching_hotel = None
+        provider_item_id = saved_hotel["provider_item_id"]
+
+        if provider_item_id is not None:
+            # Match the exact LiteAPI hotel ID.
+            matching_hotel = next(
+                (
+                    result
+                    for result in current_results
+                    if str(result.get("id"))
+                    == str(provider_item_id)
+                ),
+                None,
             )
 
+        if matching_hotel is None:
+            # Do not substitute another hotel's price.
+            new_status = "unavailable"
+            current_price = saved_hotel["current_price"]
+
+        else:
+            current_price = float(matching_hotel["price"])
+
+            new_status = get_price_status(
+                saved_price=float(
+                    saved_hotel["saved_price"]
+                    or saved_hotel["price"]
+                ),
+                current_price=current_price,
+            )
+
+        # Save the refreshed state.
         cur.execute(
             """
             UPDATE saved_hotels
@@ -397,7 +524,8 @@ def refresh_saved_hotel_price(username: str, saved_hotel_id: int):
                 current_price = %s,
                 last_checked_at = NOW(),
                 price_status = %s
-            WHERE id = %s AND user_id = %s
+            WHERE id = %s
+              AND user_id = %s
             RETURNING *;
             """,
             (
@@ -409,8 +537,8 @@ def refresh_saved_hotel_price(username: str, saved_hotel_id: int):
         )
 
         updated_hotel = cur.fetchone()
-        
-        # Evaluate any active alert linked to this saved hotel.
+
+        # Re-evaluate any active price alert.
         evaluate_hotel_alerts(
             cur=cur,
             saved_hotel_id=saved_hotel_id,
@@ -420,11 +548,13 @@ def refresh_saved_hotel_price(username: str, saved_hotel_id: int):
                 else float(current_price)
             ),
         )
+
         conn.commit()
 
         return dict(updated_hotel)
 
     except HTTPException:
+        conn.rollback()
         raise
 
     except Exception as error:
@@ -438,7 +568,6 @@ def refresh_saved_hotel_price(username: str, saved_hotel_id: int):
     finally:
         cur.close()
         conn.close()
-
 
 def delete_saved_flight_for_user(
     username: str,

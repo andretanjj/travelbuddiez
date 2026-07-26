@@ -362,7 +362,8 @@ function TravelPlanningPage() {
         return;
       }
 
-      const savedFlight = await saveFlight({
+     const savedFlight = await saveFlight({
+        provider_item_id: flight.providerItemId,
         origin_code: selectedOriginCode,
         origin_name: originInput,
         destination_code: selectedDestinationCode,
@@ -372,10 +373,12 @@ function TravelPlanningPage() {
         price: flight.price,
         currency: flight.currency,
         airline: flight.airline,
+        flight_number: flight.flightNumber,
+        departure_at: flight.departureAt,
         duration: flight.duration,
         stops: flight.stops,
         provider: "duffel",
-      });
+    });
 
       // Add the returned database record immediately.
       setSavedFlights((currentFlights) => [
@@ -439,6 +442,7 @@ function TravelPlanningPage() {
       }
 
       const savedHotel = await saveHotel({
+        provider_item_id: hotel.id,
         destination_code: selectedHotelCode,
         destination_name: hotelDestinationInput,
         hotel_name: hotel.name,

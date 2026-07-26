@@ -70,17 +70,23 @@ def normalise_duffel_offer(offer):
 
     return {
         "id": offer["id"],
-
-        # Use the final destination city/country, not the first layover city.
-        "city": last_segment["destination"]["city_name"] or last_segment["destination"]["name"],
+        "providerItemId": offer["id"],
+        "city": (
+            last_segment["destination"]["city_name"]
+            or last_segment["destination"]["name"]
+        ),
         "country": last_segment["destination"]["iata_country_code"],
-
-        # Show full requested journey, not the first segment only.
-        "route": f"{first_segment['origin']['iata_code']} → {last_segment['destination']['iata_code']}",
-
+        "route": (
+            f"{first_segment['origin']['iata_code']} → "
+            f"{last_segment['destination']['iata_code']}"
+        ),
         "price": total_amount,
         "currency": offer["total_currency"],
         "airline": airline_name,
+        "flightNumber": first_segment.get(
+            "marketing_carrier_flight_number"
+        ),
+        "departureAt": first_segment.get("departing_at"),
         "duration": first_slice["duration"],
         "stops": stops,
         "departureDate": first_segment["departing_at"][:10],
