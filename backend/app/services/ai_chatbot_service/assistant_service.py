@@ -141,35 +141,91 @@ def format_conversation_history(
 def get_task_instruction(intent: str) -> str:
     if intent == "destination_recommendation":
         return """
-Recommend between three and five suitable destinations from the supplied
-candidate data. Consider the user's budget, destination type, safety
-priority, trip duration and interests. Explain important trade-offs.
-Do not mention live flight or hotel prices unless they were supplied.
-"""
+    Recommend between three and five suitable destinations from the supplied
+    candidate data. Consider the user's budget, destination type, safety
+    priority, trip duration and interests. Explain important trade-offs.
+    Do not mention live flight or hotel prices unless they were supplied.
+    """
 
     if intent == "travel_advice":
         return """
-Provide practical travel-planning advice that answers the user's request.
-This may include an itinerary, activity categories, transport suggestions,
-packing advice, accommodation considerations or budget allocation.
+    Provide practical travel-planning advice that answers the user's request.
+    This may include an itinerary, activity categories, transport suggestions,
+    packing advice, accommodation considerations or budget allocation.
 
-Use supplied TravelBuddiez data for current destination conditions.
-General planning ideas must be described as suggestions. Do not invent
-current prices, opening hours, availability, visa rules or precise forecasts.
-"""
+    Use supplied TravelBuddiez data for current destination conditions.
+    General planning ideas must be described as suggestions. Do not invent
+    current prices, opening hours, availability, visa rules or precise forecasts.
+    """
 
     if intent == "destination_question":
         return """
-Answer the destination-specific question using the supplied TravelBuddiez
-data. You may include practical planning advice when relevant, but clearly
-separate current platform data from general suggestions.
-"""
+    Answer the destination-specific question using the supplied TravelBuddiez
+    data. You may include practical planning advice when relevant, but clearly
+    separate current platform data from general suggestions.
+    """
 
     return """
-Politely explain that TravelBuddiez only assists with travel-related
-questions.
-"""
+    Politely explain that TravelBuddiez only assists with travel-related
+    questions.
+    """
 
+    if intent == "flight_price_question":
+        return """
+    Use only the supplied flight-price data to answer the question.
+
+    Recommend up to five suitable flight options. Compare:
+    - Total price
+    - Airline
+    - Number of stops
+    - Journey duration
+    - Departure details
+
+    Place the cheapest option first, but mention meaningful trade-offs.
+    Do not invent flights, prices or availability.
+    Clearly state that live prices and availability may change.
+    """
+
+    if intent == "hotel_price_question":
+        return """
+    Use only the supplied hotel-price data to answer the question.
+
+    Recommend up to five suitable hotel options. Compare:
+    - Total stay price
+    - Hotel rating
+    - City or location
+    - Stay dates
+
+    Place the cheapest option first, but mention meaningful trade-offs.
+    Do not invent hotels, prices or availability.
+    Clearly state that live prices and availability may change.
+    """
+
+    if intent == "flight_and_hotel_price_question":
+        return """
+    Use only the supplied flight-price and hotel-price data to recommend
+    an affordable trip plan.
+
+    Identify:
+    1. The recommended flight
+    2. The recommended hotel
+    3. The flight price
+    4. The hotel price
+    5. The estimated combined flight-and-hotel price
+
+    Compare the cheapest options and explain meaningful trade-offs such as:
+    - Direct flight versus connecting flight
+    - Journey duration
+    - Airline
+    - Hotel rating
+    - Hotel location
+
+    Only calculate a combined total when the flight and hotel use the same
+    currency. If their currencies differ, show the two prices separately.
+
+    Do not invent flights, hotels, prices or availability.
+    Clearly state that live prices and availability may change.
+    """
 
 def generate_assistant_reply(
     user_message: str,
@@ -257,6 +313,12 @@ information, rely only on the supplied TravelBuddiez destination data.
 When giving itinerary, transport, packing or budgeting suggestions,
 make it clear that these are general planning suggestions if they are
 not directly supported by supplied data.
+
+For flight and hotel questions, use only the supplied flight-price and
+hotel-price data. Do not claim that Gemini searched the providers directly.
+The TravelBuddiez backend retrieved the supplied provider data.
+
+Do not add prices with different currencies together.
 """
 
     response = client.models.generate_content(

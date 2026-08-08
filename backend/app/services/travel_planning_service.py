@@ -67,6 +67,7 @@ def search_flights(
             "duration": "6h 50m",
             "stops": "Direct",
             "departureDate": departure_date,
+            "returnDate": return_date,
         },
         {
             "id": "flight-2",
@@ -79,6 +80,7 @@ def search_flights(
             "duration": "6h 20m",
             "stops": "Direct",
             "departureDate": departure_date,
+            "returnDate": return_date,
         },
     ]
 
