@@ -14,21 +14,27 @@ from datetime import datetime
 
 def parse_provider_datetime(value):
     """
-    Converts database or provider datetime values into Python datetime objects.
+    Converts database/provider datetime values into comparable
+    timezone-naive Python datetime objects.
 
-    Duffel commonly returns ISO 8601 strings ending in Z.
-    PostgreSQL may return a datetime object directly.
+    Duffel returns local ISO datetimes without a timezone offset.
+    PostgreSQL may return the same stored value as timezone-aware,
+    so we remove timezone information before exact comparison.
     """
 
     if value is None:
         return None
 
     if isinstance(value, datetime):
-        return value
+        parsed = value
+    else:
+        parsed = datetime.fromisoformat(
+            str(value).replace("Z", "+00:00")
+        )
 
-    return datetime.fromisoformat(
-        str(value).replace("Z", "+00:00")
-    )
+    # Normalize both PostgreSQL and provider timestamps to the
+    # same timezone-naive representation before comparison.
+    return parsed.replace(tzinfo=None)
 
 
 def get_price_status(saved_price: float, current_price: float) -> str:
@@ -77,6 +83,8 @@ def save_flight_for_user(username: str, flight: dict):
                 airline,
                 flight_number,
                 departure_at,
+                return_flight_number,
+                return_departure_at,
                 duration,
                 stops,
                 currency,
@@ -87,8 +95,8 @@ def save_flight_for_user(username: str, flight: dict):
                 price_status
             )
             VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                 NOW(), NOW(), %s
             )
             RETURNING *;
@@ -109,6 +117,8 @@ def save_flight_for_user(username: str, flight: dict):
                 flight.airline,
                 flight.flight_number,
                 flight.departure_at,
+                flight.return_flight_number,
+                flight.return_departure_at,
                 flight.duration,
                 flight.stops,
                 flight.currency,
@@ -317,7 +327,9 @@ def refresh_saved_flight_price(
                 detail="Saved flight not found",
             )
 
-        # Run a new live search for the same route and date.
+        # Re-run the same search that originally produced the saved flight.
+        # If return_date is NULL, search_flights performs a one-way search.
+        # If return_date exists, Duffel receives both outbound and return slices.
         current_results = search_flights(
             origin=(
                 saved_flight["origin_code"]
@@ -331,6 +343,11 @@ def refresh_saved_flight_price(
                 saved_flight["departure_date"]
             ),
             adults=1,
+            return_date=(
+                str(saved_flight["return_date"])
+                if saved_flight["return_date"] is not None
+                else None
+            ),
         )
 
         expected_route = (
@@ -342,28 +359,74 @@ def refresh_saved_flight_price(
             saved_flight["departure_at"]
         )
 
+        saved_return_departure_at = parse_provider_datetime(
+            saved_flight["return_departure_at"]
+        )
+
+        expected_return_route = (
+            f"{saved_flight['destination_code']} → "
+            f"{saved_flight['origin_code']}"
+        )
+
         matching_flight = next(
             (
                 result
                 for result in current_results
                 if (
-                    # Same airline.
+                    # ----- OUTBOUND LEG -----
+
+                    # Same airline selling the offer.
                     result["airline"].strip().lower()
                     == saved_flight["airline"].strip().lower()
 
-                    # Same marketing flight number.
+                    # Same outbound marketing flight number.
                     and result.get("flightNumber")
                     == saved_flight["flight_number"]
 
-                    # Same scheduled departure timestamp.
+                    # Same outbound scheduled departure.
                     and parse_provider_datetime(
                         result.get("departureAt")
                     )
                     == saved_departure_at
 
-                    # Same origin and destination route.
+                    # Same outbound route.
                     and result["route"].replace(" ", "").lower()
                     == expected_route.replace(" ", "").lower()
+
+                    # ----- RETURN LEG -----
+                    #
+                    # For a one-way saved flight, both sides should have
+                    # no return date.
+                    #
+                    # For a round trip, verify the return flight too.
+                    and (
+                        (
+                            saved_flight["return_date"] is None
+                            and result.get("returnDate") is None
+                        )
+                        or
+                        (
+                            saved_flight["return_date"] is not None
+
+                            and result.get("returnDate")
+                            == str(saved_flight["return_date"])
+
+                            and result.get("returnFlightNumber")
+                            == saved_flight["return_flight_number"]
+
+                            and parse_provider_datetime(
+                                result.get("returnDepartureAt")
+                            )
+                            == saved_return_departure_at
+
+                            and result.get("returnRoute", "")
+                            .replace(" ", "")
+                            .lower()
+                            == expected_return_route
+                            .replace(" ", "")
+                            .lower()
+                        )
+                    )
                 )
             ),
             None,

@@ -397,6 +397,8 @@ function TravelPlanningPage() {
         airline: flight.airline,
         flight_number: flight.flightNumber,
         departure_at: flight.departureAt,
+        return_flight_number: flight.returnFlightNumber,
+        return_departure_at: flight.returnDepartureAt,
         duration: flight.duration,
         stops: flight.stops,
         provider: "duffel",

@@ -18,6 +18,8 @@ export interface SaveFlightRequest {
   airline: string;
   flight_number: string | null;
   departure_at: string | null;
+  return_flight_number: string | null;
+  return_departure_at: string | null;
   duration: string;
   stops: string;
   provider: string;

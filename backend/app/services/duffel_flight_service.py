@@ -91,6 +91,9 @@ def normalise_duffel_offer(offer):
 
     outbound_first_segment = outbound["firstSegment"]
     outbound_last_segment = outbound["lastSegment"]
+    # The first segment of the inbound slice identifies the first
+    # return flight. It is None for one-way journeys.
+    inbound_first_segment = (inbound["firstSegment"] if inbound else None)
 
     return {
         "id": offer["id"],
@@ -135,6 +138,14 @@ def normalise_duffel_offer(offer):
         "returnStops": (
             inbound["stops"]
             if inbound
+            else None
+        ),
+
+        "returnFlightNumber": (
+            inbound_first_segment.get(
+                "marketing_carrier_flight_number"
+            )
+            if inbound_first_segment
             else None
         ),
 
@@ -236,7 +247,7 @@ def search_duffel_flights(origin: str, destination: str, departure_date: str, ad
 
     normalised_offers = []
 
-    for offer in offers[:20]:
+    for offer in offers:
         try:
             owner = offer.get("owner", {})
             owner_name = owner.get("name", "")

@@ -24,6 +24,7 @@ export interface FlightResult {
   returnDepartureAt: string | null;
   returnDuration: string | null;
   returnStops: string | null;
+  returnFlightNumber: string | null;
 
   // Price is Duffel's total offer price.
   price: number;
