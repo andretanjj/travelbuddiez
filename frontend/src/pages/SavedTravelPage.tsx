@@ -698,9 +698,49 @@ function SavedTravelPage() {
                     {flight.airline} · {flight.duration} · {flight.stops}
                   </p>
 
-                  <p className="mt-1 text-sm text-slate-500">
-                    Departure: {flight.departure_date}
-                  </p>
+                  {flight.return_date && (
+                    <div className="mt-3 rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-2">
+                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                        Return journey
+                      </p>
+
+                      <p className="mt-1 text-sm text-slate-300">
+                        {flight.destination_code} → {flight.origin_code}
+                      </p>
+
+                      {flight.return_flight_number && (
+                        <p className="mt-1 text-xs text-slate-500">
+                          Flight: {flight.return_flight_number}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {flight.return_date ? (
+                    <>
+                      <p className="mt-2 inline-flex rounded-full border border-blue-400/30 bg-blue-400/10 px-2 py-1 text-xs font-medium text-blue-300">
+                        Round trip
+                      </p>
+
+                      <p className="mt-2 text-sm text-slate-500">
+                        Outbound: {flight.departure_date}
+                      </p>
+
+                      <p className="mt-1 text-sm text-slate-500">
+                        Return: {flight.return_date}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="mt-2 inline-flex rounded-full border border-slate-600 bg-slate-800 px-2 py-1 text-xs font-medium text-slate-300">
+                        One way
+                      </p>
+
+                      <p className="mt-2 text-sm text-slate-500">
+                        Departure: {flight.departure_date}
+                      </p>
+                    </>
+                  )}
 
                   <p className="mt-2 text-sm text-slate-400">
                     Status: {getPriceStatusLabel(flight.price_status)}

@@ -57,6 +57,8 @@ def create_flight_price_alert(
                 sf.currency,
                 sf.origin_name,
                 sf.destination_name,
+                sf.departure_date,
+                sf.return_date,
                 u.email
             FROM saved_flights AS sf
             JOIN users AS u
@@ -215,6 +217,17 @@ def create_flight_price_alert(
                     current_price=converted_current_price,
                     target_price=float(target_price),
                     currency=target_currency,
+                    trip_type=(
+                        "Round trip"
+                        if saved_flight["return_date"]
+                        else "One way"
+                    ),
+                    departure_date=str(saved_flight["departure_date"]),
+                    return_date=(
+                        str(saved_flight["return_date"])
+                        if saved_flight["return_date"]
+                        else None
+                    ),
                 )
 
                 cur.execute(
@@ -632,7 +645,9 @@ def evaluate_flight_alerts(
             u.email,
             sf.origin_name,
             sf.destination_name,
-            sf.currency
+            sf.currency,
+            sf.departure_date,
+            sf.return_date,
         FROM price_alerts AS pa
         JOIN users AS u
             ON u.id = pa.user_id
@@ -743,6 +758,17 @@ def evaluate_flight_alerts(
                 current_price=latest_price,
                 target_price=target_price,
                 currency=alert["target_currency"],
+                trip_type=(
+                    "Round trip"
+                    if alert["return_date"]
+                    else "One way"
+                ),
+                departure_date=str(alert["departure_date"]),
+                return_date=(
+                    str(alert["return_date"])
+                    if alert["return_date"]
+                    else None
+                ),
             )
 
             # Email was successfully accepted by Resend.

@@ -23,6 +23,9 @@ def send_price_alert_email(
     current_price: float,
     target_price: float,
     currency: str,
+    trip_type: str | None = None,
+    departure_date: str | None = None,
+    return_date: str | None = None,
 ) -> str:
     """
     Sends a price-alert email through Resend.
@@ -43,6 +46,31 @@ def send_price_alert_email(
         f"{item_name}"
     )
 
+    trip_details_html = ""
+
+    if cleaned_item_type == "flight":
+        trip_details_html = f"""
+            <p>
+                <strong>Trip type:</strong>
+                {trip_type or "One way"}
+            </p>
+        """
+
+        if departure_date:
+            if return_date:
+                trip_details_html += f"""
+                    <p>
+                        <strong>Outbound:</strong> {departure_date}<br>
+                        <strong>Return:</strong> {return_date}
+                    </p>
+                """
+            else:
+                trip_details_html += f"""
+                    <p>
+                        <strong>Departure:</strong> {departure_date}
+                    </p>
+                """
+
     html = f"""
     <div style="font-family: Arial, sans-serif; line-height: 1.6;">
         <h2>Your {cleaned_item_type} price target has been reached</h2>
@@ -51,6 +79,8 @@ def send_price_alert_email(
             The latest price for <strong>{item_name}</strong>
             is now within your target.
         </p>
+
+        {trip_details_html}
 
         <p>
             <strong>Current price:</strong>
