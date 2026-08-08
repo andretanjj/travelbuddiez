@@ -13,6 +13,7 @@ export interface PriceAlert {
   user_id: number;
   alert_type: AlertType;
   target_price: number;
+  target_currency: string;
   is_active: boolean;
   saved_flight_id: number | null;
   saved_hotel_id: number | null;

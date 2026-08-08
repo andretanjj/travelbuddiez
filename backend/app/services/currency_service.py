@@ -82,3 +82,23 @@ def get_exchange_rate(
         "quote": data["quote"],
         "rate": float(data["rate"]),
     }
+
+
+def convert_currency_amount(
+    amount: float,
+    from_currency: str,
+    to_currency: str,
+) -> float:
+    """
+    Converts an amount using the latest Frankfurter exchange rate.
+
+    Example:
+    USD 300 -> SGD 384
+    """
+
+    rate_data = get_exchange_rate(
+        from_currency=from_currency,
+        to_currency=to_currency,
+    )
+
+    return float(amount) * rate_data["rate"]

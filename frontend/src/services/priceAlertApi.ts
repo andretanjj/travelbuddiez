@@ -37,7 +37,8 @@ async function getErrorMessage(response: Response): Promise<string> {
 
 export async function createFlightPriceAlert(
   savedFlightId: number,
-  targetPrice: number
+  targetPrice: number,
+  targetCurrency: string
 ): Promise<PriceAlert> {
   const response = await fetch(
     `${API_BASE_URL}/price-alerts/flights/${savedFlightId}`,
@@ -46,6 +47,7 @@ export async function createFlightPriceAlert(
       headers: getAuthHeaders(),
       body: JSON.stringify({
         target_price: targetPrice,
+        target_currency: targetCurrency,
       }),
     }
   );
@@ -59,7 +61,8 @@ export async function createFlightPriceAlert(
 
 export async function createHotelPriceAlert(
   savedHotelId: number,
-  targetPrice: number
+  targetPrice: number,
+  targetCurrency: string
 ): Promise<PriceAlert> {
   const response = await fetch(
     `${API_BASE_URL}/price-alerts/hotels/${savedHotelId}`,
@@ -68,6 +71,7 @@ export async function createHotelPriceAlert(
       headers: getAuthHeaders(),
       body: JSON.stringify({
         target_price: targetPrice,
+        target_currency: targetCurrency,
       }),
     }
   );

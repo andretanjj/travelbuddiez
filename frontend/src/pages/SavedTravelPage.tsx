@@ -284,7 +284,6 @@ function SavedTravelPage() {
 
   async function handleSetFlightAlert(
     savedFlightId: number,
-    currency: string
   ) {
     /*
       Creates a new alert or updates the existing active alert.
@@ -305,7 +304,8 @@ function SavedTravelPage() {
     try {
       const updatedAlert = await createFlightPriceAlert(
         savedFlightId,
-        targetPrice
+        targetPrice,
+        displayCurrency
       );
 
       setPriceAlerts((currentAlerts) => {
@@ -330,7 +330,7 @@ function SavedTravelPage() {
       }));
 
       setMessage(
-        `Flight price alert set for ${currency} ${targetPrice}.`
+        `Flight price alert set for ${displayCurrency} ${targetPrice}.`
       );
     } catch (error) {
       if (error instanceof Error) {
@@ -374,8 +374,7 @@ function SavedTravelPage() {
   }
 
   async function handleSetHotelAlert(
-    savedHotelId: number,
-    currency: string
+    savedHotelId: number
   ) {
     /*
       Creates a new hotel alert or updates its existing active alert.
@@ -395,7 +394,8 @@ function SavedTravelPage() {
     try {
       const updatedAlert = await createHotelPriceAlert(
         savedHotelId,
-        targetPrice
+        targetPrice,
+        displayCurrency,
       );
 
       setPriceAlerts((currentAlerts) => {
@@ -418,7 +418,7 @@ function SavedTravelPage() {
       }));
 
       setMessage(
-        `Hotel price alert set for ${currency} ${targetPrice}.`
+        `Hotel price alert set for ${displayCurrency} ${targetPrice}.`
       );
     } catch (error) {
       if (error instanceof Error) {
@@ -747,7 +747,7 @@ function SavedTravelPage() {
                           <Bell size={15} className="text-green-400" />
 
                           <p className="text-sm text-green-400">
-                            Alert: {flight.currency} {activeAlert.target_price}
+                            Alert: {activeAlert.target_currency} {activeAlert.target_price}
                           </p>
                         </div>
 
@@ -781,18 +781,18 @@ function SavedTravelPage() {
                           onChange={(event) =>
                             updateAlertInput(itemKey, event.target.value)
                           }
-                          placeholder={`Target in ${flight.currency}`}
+                          placeholder={`Target in ${displayCurrency}`}
                           className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-amber-500 md:w-48"
                         />
 
                         <p className="mt-1 text-xs text-slate-500">
-                          Alerts use the original provider currency ({flight.currency}).
+                          Alert will be checked and emailed in {displayCurrency}.
                         </p>
 
                         <button
                           type="button"
                           onClick={() =>
-                            handleSetFlightAlert(flight.id, flight.currency)
+                            handleSetFlightAlert(flight.id)
                           }
                           disabled={updatingAlertItem === itemKey}
                           className="mt-2 inline-flex items-center gap-2 rounded-lg border border-green-500 px-3 py-2 text-sm font-semibold text-green-400 transition hover:bg-green-500 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-60"
@@ -918,7 +918,7 @@ function SavedTravelPage() {
                           <Bell size={15} className="text-green-400" />
 
                           <p className="text-sm text-green-400">
-                            Alert: {hotel.currency} {activeAlert.target_price}
+                            Alert: {activeAlert.target_currency} {activeAlert.target_price}
                           </p>
                         </div>
 
@@ -953,18 +953,18 @@ function SavedTravelPage() {
                           onChange={(event) =>
                             updateAlertInput(itemKey, event.target.value)
                           }
-                          placeholder={`Target in ${hotel.currency}`}
+                          placeholder={`Target in ${displayCurrency}`}
                           className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-amber-500 md:w-48"
                         />
 
                         <p className="mt-1 text-xs text-slate-500">
-                          Alerts use the original provider currency ({hotel.currency}).
+                          Alert will be checked and emailed in {displayCurrency}.
                         </p>
 
                         <button
                           type="button"
                           onClick={() =>
-                            handleSetHotelAlert(hotel.id, hotel.currency)
+                            handleSetHotelAlert(hotel.id)
                           }
                           disabled={updatingAlertItem === itemKey}
                           className="mt-2 inline-flex items-center gap-2 rounded-lg border border-green-500 px-3 py-2 text-sm font-semibold text-green-400 transition hover:bg-green-500 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-60"

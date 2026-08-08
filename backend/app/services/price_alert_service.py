@@ -5,13 +5,23 @@ from app.services.user_service import get_user_id_by_username
 
 from app.services.email_service import send_price_alert_email
 
+from app.services.currency_service import (
+    SUPPORTED_CURRENCIES,
+    convert_currency_amount,
+)
+
+
 def create_flight_price_alert(
     username: str,
     saved_flight_id: int,
     target_price: float,
+    target_currency: str,
 ):
     """
     Creates or updates a flight price alert.
+
+    The user chooses the alert currency.
+    Provider prices are converted into that currency before comparison.
 
     When the latest known flight price is already at or below the target,
     the notification email is sent immediately.
@@ -23,13 +33,22 @@ def create_flight_price_alert(
             detail="Target price must be greater than zero",
         )
 
+    target_currency = target_currency.upper()
+
+    if target_currency not in SUPPORTED_CURRENCIES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported alert currency: {target_currency}",
+        )
+
     user_id = get_user_id_by_username(username)
 
     conn = get_connection()
     cur = conn.cursor()
 
     try:
-        # Verify ownership and retrieve the information needed for the email.
+        # Verify ownership and retrieve the information needed
+        # for comparison and email delivery.
         cur.execute(
             """
             SELECT
@@ -61,10 +80,29 @@ def create_flight_price_alert(
 
         current_price = saved_flight["current_price"]
 
-        target_reached = (
-            current_price is not None
-            and float(current_price) <= float(target_price)
-        )
+        target_reached = False
+        converted_current_price = None
+
+        if current_price is not None:
+            try:
+                # Convert the provider price into the currency
+                # chosen by the user for this alert.
+                converted_current_price = convert_currency_amount(
+                    amount=float(current_price),
+                    from_currency=saved_flight["currency"],
+                    to_currency=target_currency,
+                )
+
+                target_reached = (
+                    converted_current_price <= float(target_price)
+                )
+
+            except (ValueError, RuntimeError) as error:
+                # Saving the alert should still succeed if the FX service
+                # is temporarily unavailable.
+                print(
+                    f"Unable to convert flight price for alert: {error}"
+                )
 
         initial_status = "triggered" if target_reached else "pending"
 
@@ -93,6 +131,7 @@ def create_flight_price_alert(
                 UPDATE price_alerts
                 SET
                     target_price = %s,
+                    target_currency = %s,
                     is_active = TRUE,
                     notification_status = %s,
                     last_checked_at = NOW(),
@@ -104,6 +143,7 @@ def create_flight_price_alert(
                 """,
                 (
                     target_price,
+                    target_currency,
                     initial_status,
                     existing_alert["id"],
                     user_id,
@@ -119,6 +159,7 @@ def create_flight_price_alert(
                     user_id,
                     alert_type,
                     target_price,
+                    target_currency,
                     is_active,
                     saved_flight_id,
                     saved_hotel_id,
@@ -131,6 +172,7 @@ def create_flight_price_alert(
                 VALUES (
                     %s,
                     'flight',
+                    %s,
                     %s,
                     TRUE,
                     %s,
@@ -146,6 +188,7 @@ def create_flight_price_alert(
                 (
                     user_id,
                     target_price,
+                    target_currency,
                     saved_flight_id,
                     initial_status,
                 ),
@@ -153,8 +196,12 @@ def create_flight_price_alert(
 
             saved_alert = cur.fetchone()
 
-        # Send immediately when the current price already meets the target.
-        if target_reached:
+        # Send immediately when the converted current price
+        # already meets the user's target.
+        if (
+            target_reached
+            and converted_current_price is not None
+        ):
             item_name = (
                 f'{saved_flight["origin_name"]} to '
                 f'{saved_flight["destination_name"]}'
@@ -165,9 +212,9 @@ def create_flight_price_alert(
                     recipient_email=saved_flight["email"],
                     item_type="flight",
                     item_name=item_name,
-                    current_price=float(current_price),
+                    current_price=converted_current_price,
                     target_price=float(target_price),
-                    currency=saved_flight["currency"],
+                    currency=target_currency,
                 )
 
                 cur.execute(
@@ -217,9 +264,13 @@ def create_hotel_price_alert(
     username: str,
     saved_hotel_id: int,
     target_price: float,
+    target_currency: str,
 ):
     """
     Creates or updates a hotel price alert.
+
+    The user chooses the alert currency.
+    Provider prices are converted into that currency before comparison.
 
     When the latest known hotel price is already at or below the target,
     the notification email is sent immediately.
@@ -231,13 +282,22 @@ def create_hotel_price_alert(
             detail="Target price must be greater than zero",
         )
 
+    target_currency = target_currency.upper()
+
+    if target_currency not in SUPPORTED_CURRENCIES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported alert currency: {target_currency}",
+        )
+
     user_id = get_user_id_by_username(username)
 
     conn = get_connection()
     cur = conn.cursor()
 
     try:
-        # Verify ownership and retrieve the information needed for the email.
+        # Verify ownership and retrieve the information needed
+        # for comparison and email delivery.
         cur.execute(
             """
             SELECT
@@ -270,10 +330,27 @@ def create_hotel_price_alert(
 
         current_price = saved_hotel["current_price"]
 
-        target_reached = (
-            current_price is not None
-            and float(current_price) <= float(target_price)
-        )
+        target_reached = False
+        converted_current_price = None
+
+        if current_price is not None:
+            try:
+                # Convert the provider price into the currency
+                # selected by the user.
+                converted_current_price = convert_currency_amount(
+                    amount=float(current_price),
+                    from_currency=saved_hotel["currency"],
+                    to_currency=target_currency,
+                )
+
+                target_reached = (
+                    converted_current_price <= float(target_price)
+                )
+
+            except (ValueError, RuntimeError) as error:
+                print(
+                    f"Unable to convert hotel price for alert: {error}"
+                )
 
         initial_status = "triggered" if target_reached else "pending"
 
@@ -301,6 +378,7 @@ def create_hotel_price_alert(
                 UPDATE price_alerts
                 SET
                     target_price = %s,
+                    target_currency = %s,
                     is_active = TRUE,
                     notification_status = %s,
                     last_checked_at = NOW(),
@@ -312,6 +390,7 @@ def create_hotel_price_alert(
                 """,
                 (
                     target_price,
+                    target_currency,
                     initial_status,
                     existing_alert["id"],
                     user_id,
@@ -327,6 +406,7 @@ def create_hotel_price_alert(
                     user_id,
                     alert_type,
                     target_price,
+                    target_currency,
                     is_active,
                     saved_flight_id,
                     saved_hotel_id,
@@ -339,6 +419,7 @@ def create_hotel_price_alert(
                 VALUES (
                     %s,
                     'hotel',
+                    %s,
                     %s,
                     TRUE,
                     NULL,
@@ -354,6 +435,7 @@ def create_hotel_price_alert(
                 (
                     user_id,
                     target_price,
+                    target_currency,
                     saved_hotel_id,
                     initial_status,
                 ),
@@ -361,7 +443,10 @@ def create_hotel_price_alert(
 
             saved_alert = cur.fetchone()
 
-        if target_reached:
+        if (
+            target_reached
+            and converted_current_price is not None
+        ):
             item_name = (
                 f'{saved_hotel["hotel_name"]}, '
                 f'{saved_hotel["city"]}, '
@@ -373,9 +458,9 @@ def create_hotel_price_alert(
                     recipient_email=saved_hotel["email"],
                     item_type="hotel",
                     item_name=item_name,
-                    current_price=float(current_price),
+                    current_price=converted_current_price,
                     target_price=float(target_price),
-                    currency=saved_hotel["currency"],
+                    currency=target_currency,
                 )
 
                 cur.execute(
@@ -524,9 +609,12 @@ def evaluate_flight_alerts(
     """
     Evaluates active alerts linked to one saved flight.
 
+    The provider price is converted into each alert's target currency
+    before comparison.
+
     Status flow:
     - unavailable: no current price was returned
-    - pending: current price is above the user's target
+    - pending: converted current price is above the user's target
     - notified: target was reached and the email was sent
     - triggered: target was reached, but email delivery failed
 
@@ -538,6 +626,7 @@ def evaluate_flight_alerts(
         SELECT
             pa.id,
             pa.target_price,
+            pa.target_currency,
             pa.notification_status,
             pa.last_notified_at,
             u.email,
@@ -576,9 +665,38 @@ def evaluate_flight_alerts(
             continue
 
         target_price = float(alert["target_price"])
-        latest_price = float(current_price)
+        provider_price = float(current_price)
 
-        # Price is still above the user's target.
+        try:
+            # Always use the latest available exchange rate
+            # when evaluating the alert.
+            latest_price = convert_currency_amount(
+                amount=provider_price,
+                from_currency=alert["currency"],
+                to_currency=alert["target_currency"],
+            )
+
+        except (ValueError, RuntimeError) as error:
+            # Do not compare currencies when conversion failed.
+            print(
+                f"Unable to convert flight price "
+                f"for alert {alert['id']}: {error}"
+            )
+
+            cur.execute(
+                """
+                UPDATE price_alerts
+                SET
+                    last_checked_at = NOW(),
+                    updated_at = NOW()
+                WHERE id = %s;
+                """,
+                (alert["id"],),
+            )
+
+            continue
+
+        # Converted price is still above the user's target.
         if latest_price > target_price:
             cur.execute(
                 """
@@ -624,7 +742,7 @@ def evaluate_flight_alerts(
                 item_name=item_name,
                 current_price=latest_price,
                 target_price=target_price,
-                currency=alert["currency"],
+                currency=alert["target_currency"],
             )
 
             # Email was successfully accepted by Resend.
@@ -668,8 +786,10 @@ def evaluate_hotel_alerts(
     current_price: float | None,
 ):
     """
-    Evaluates active alerts linked to one saved hotel and sends an email
-    when the current total stay price reaches the target.
+    Evaluates active alerts linked to one saved hotel.
+
+    The provider price is converted into each alert's target currency
+    before comparison and email delivery.
     """
 
     cur.execute(
@@ -677,6 +797,7 @@ def evaluate_hotel_alerts(
         SELECT
             pa.id,
             pa.target_price,
+            pa.target_currency,
             pa.notification_status,
             pa.last_notified_at,
             u.email,
@@ -715,8 +836,36 @@ def evaluate_hotel_alerts(
             continue
 
         target_price = float(alert["target_price"])
-        latest_price = float(current_price)
+        provider_price = float(current_price)
 
+        try:
+            # Always compare using the user's selected alert currency.
+            latest_price = convert_currency_amount(
+                amount=provider_price,
+                from_currency=alert["currency"],
+                to_currency=alert["target_currency"],
+            )
+
+        except (ValueError, RuntimeError) as error:
+            print(
+                f"Unable to convert hotel price "
+                f"for alert {alert['id']}: {error}"
+            )
+
+            cur.execute(
+                """
+                UPDATE price_alerts
+                SET
+                    last_checked_at = NOW(),
+                    updated_at = NOW()
+                WHERE id = %s;
+                """,
+                (alert["id"],),
+            )
+
+            continue
+
+        # Converted price is still above the user's target.
         if latest_price > target_price:
             cur.execute(
                 """
@@ -762,7 +911,7 @@ def evaluate_hotel_alerts(
                 item_name=item_name,
                 current_price=latest_price,
                 target_price=target_price,
-                currency=alert["currency"],
+                currency=alert["target_currency"],
             )
 
             cur.execute(

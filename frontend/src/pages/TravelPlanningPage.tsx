@@ -514,10 +514,10 @@ function TravelPlanningPage() {
       ]);
 
       if (targetPrice > 0) {
-        await createFlightPriceAlert(savedFlight.id, targetPrice);
+        await createFlightPriceAlert(savedFlight.id, targetPrice, displayCurrency);
 
         setSaveMessage(
-          `Flight saved. Price alert set for ${flight.currency} ${targetPrice}.`
+          `Flight saved. Price alert set for ${displayCurrency} ${targetPrice}.`
         );
       } else {
         setSaveMessage("Flight saved successfully.");
@@ -589,13 +589,10 @@ function TravelPlanningPage() {
       ]);
 
       if (hotelTargetPrice > 0) {
-        await createHotelPriceAlert(
-          savedHotel.id,
-          hotelTargetPrice
-        );
+        await createHotelPriceAlert(savedHotel.id, hotelTargetPrice, displayCurrency);
 
         setSaveMessage(
-          `Hotel saved. Price alert set for ${hotel.currency} ${hotelTargetPrice}.`
+          `Hotel saved. Price alert set for ${displayCurrency} ${hotelTargetPrice}.`
         );
       } else {
         setSaveMessage("Hotel saved successfully.");
@@ -966,20 +963,20 @@ function TravelPlanningPage() {
         {activeTab === "flights" && (
           <div className="mb-8 rounded-xl border border-slate-800 bg-slate-900 p-4">
             <label className="mb-2 block text-sm text-slate-400">
-              Set flight price alert
+              Set flight price alert ({displayCurrency})
             </label>
 
             <input
               type="number"
-              placeholder="Notify me when flights are below this price"
+              placeholder={`Notify me when flights are below ${displayCurrency}`}
               value={alertPrice}
               onChange={(event) => setAlertPrice(event.target.value)}
               className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-amber-500"
             />
 
             <p className="mt-2 text-xs text-slate-500">
-              Enter a target price before saving a flight to create a persistent
-              price alert.
+              Enter your target in {displayCurrency}. TravelBuddiez will convert
+              refreshed provider prices automatically when checking your alert.
             </p>
           </div>
         )}
@@ -988,20 +985,20 @@ function TravelPlanningPage() {
         {activeTab === "hotels" && (
           <div className="mb-8 rounded-xl border border-slate-800 bg-slate-900 p-4">
             <label className="mb-2 block text-sm text-slate-400">
-              Set hotel price alert
+              Set hotel price alert ({displayCurrency})
             </label>
 
             <input
               type="number"
-              placeholder="Notify me when hotels are below this total stay price"
+              placeholder={`Notify me when hotels are below ${displayCurrency}`}
               value={hotelAlertPrice}
               onChange={(event) => setHotelAlertPrice(event.target.value)}
               className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-amber-500"
             />
 
             <p className="mt-2 text-xs text-slate-500">
-              Enter a target total stay price before saving a hotel to create a
-              persistent price alert.
+              Enter your target in {displayCurrency}. TravelBuddiez will convert
+              refreshed provider prices automatically when checking your alert.
             </p>
           </div>
         )}
@@ -1022,7 +1019,12 @@ function TravelPlanningPage() {
                 const savedFlight = findSavedFlight(flight);
                 const isSaved = savedFlight !== undefined;
                 const itemKey = `flight-${flight.id}`;
-                const isBelowTarget = targetPrice > 0 && flight.price <= targetPrice;
+                const isBelowTarget =
+                targetPrice > 0 &&
+                  convertPrice(
+                    flight.price,
+                    flight.currency
+                  ) <= targetPrice;
 
                 return (
                   <div
@@ -1146,7 +1148,12 @@ function TravelPlanningPage() {
                 const savedHotel = findSavedHotel(hotel);
                 const isSaved = savedHotel !== undefined;
                 const itemKey = `hotel-${hotel.id}`;
-                const isBelowTarget = hotelTargetPrice > 0 && hotel.price <= hotelTargetPrice;
+                const isBelowTarget =
+                  hotelTargetPrice > 0 &&
+                  convertPrice(
+                    hotel.price,
+                    hotel.currency
+                  ) <= hotelTargetPrice;
 
                 return (
                   <div
