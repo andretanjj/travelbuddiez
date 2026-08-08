@@ -1,23 +1,40 @@
 import { useState } from "react";
 import type { SyntheticEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { HiOutlinePaperAirplane } from "react-icons/hi2";
+import {
+    HiOutlinePaperAirplane,
+    HiOutlineBookmark,
+    HiBookmark,
+} from "react-icons/hi2";
 import ReactMarkdown from "react-markdown";
 
-import { sendMessageToAiAssistant } from "../services/aiAssistantApi";
+import {
+    sendMessageToAiAssistant,
+    saveAiResponse,
+    getSavedAiResponses,
+    deleteSavedAiResponse,
+} from "../services/aiAssistantApi";
 import { getToken } from "../services/authApi";
 
 
 type ChatMessage = {
     role: "user" | "assistant";
     content: string;
+    userPrompt?: string;
+    saved?: boolean;
 };
-
 
 type AssistantResponse = {
     reply: string;
 };
 
+type SavedAiResponse = {
+    id: number;
+    title: string | null;
+    user_message: string;
+    ai_response: string;
+    saved_at: string;
+};
 
 export default function AiAssistantPage() {
     const navigate = useNavigate();
@@ -36,6 +53,12 @@ export default function AiAssistantPage() {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState("");
+
+    const [showSavedResponses, setShowSavedResponses] =
+        useState(false);
+
+    const [savedResponses, setSavedResponses] =
+        useState<SavedAiResponse[]>([]);
 
     const travelPreferences = {
         ...(origin.trim()
@@ -92,6 +115,101 @@ export default function AiAssistantPage() {
             .join("\n");
     }
 
+    async function handleSaveResponse(
+        message: ChatMessage,
+        index: number,
+    ) {
+        if (
+            message.role !== "assistant"
+            || !message.userPrompt
+        ) {
+            return;
+        }
+
+        try {
+            const questionLine = message.userPrompt
+                .split("\n")
+                .find((line) =>
+                    line.startsWith("Question:")
+                );
+
+            const title = questionLine
+                ? questionLine
+                    .replace("Question:", "")
+                    .trim()
+                : "Saved travel response";
+
+            const savedResponse = await saveAiResponse({
+                title,
+                user_message: message.userPrompt,
+                ai_response: message.content,
+            });
+
+            setSavedResponses((currentResponses) => [
+                savedResponse,
+                ...currentResponses,
+            ]);
+
+            setMessages((currentMessages) =>
+                currentMessages.map(
+                    (currentMessage, currentIndex) =>
+                        currentIndex === index
+                            ? {
+                                ...currentMessage,
+                                saved: true,
+                            }
+                            : currentMessage,
+                )
+            );
+        } catch (caughtError) {
+            console.error(
+                "Unable to save AI response:",
+                caughtError,
+            );
+
+            if (
+                caughtError instanceof Error
+                && caughtError.message === "LOGIN_REQUIRED"
+            ) {
+                navigate("/login");
+                return;
+            }
+
+            setError(
+                caughtError instanceof Error
+                    ? caughtError.message
+                    : "Unable to save AI response.",
+            );
+        }
+    }
+
+    async function handleOpenSavedResponses() {
+        try {
+            const data = await getSavedAiResponses();
+
+            setSavedResponses(data);
+            setShowSavedResponses(true);
+        } catch (caughtError) {
+            console.error(
+                "Unable to load saved AI responses:",
+                caughtError,
+            );
+
+            if (
+                caughtError instanceof Error
+                && caughtError.message === "LOGIN_REQUIRED"
+            ) {
+                navigate("/login");
+                return;
+            }
+
+            setError(
+                caughtError instanceof Error
+                    ? caughtError.message
+                    : "Unable to load saved responses.",
+            );
+        }
+    }
 
     async function handleSubmit(
         event: SyntheticEvent<HTMLFormElement>,
@@ -148,6 +266,8 @@ export default function AiAssistantPage() {
                 {
                     role: "assistant",
                     content: data.reply,
+                    userPrompt: prompt,
+                    saved: false,
                 },
             ]);
 
@@ -393,8 +513,107 @@ export default function AiAssistantPage() {
                 <ChatPanel
                     messages={messages}
                     isLoading={isLoading}
+                    onSave={handleSaveResponse}
+                    onOpenSaved={handleOpenSavedResponses}
                 />
             </div>
+
+            {showSavedResponses && (
+                <>
+                    <button
+                        type="button"
+                        aria-label="Close saved responses"
+                        onClick={() => {
+                            setShowSavedResponses(false);
+                        }}
+                        className="fixed inset-0 z-40 bg-black/60"
+                    />
+
+                    <aside
+                        className="
+                fixed right-0 top-0 z-50
+                h-full w-full max-w-md
+                overflow-y-auto
+                border-l border-white/10
+                bg-slate-950 p-6
+                shadow-2xl
+            "
+                    >
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h2 className="text-xl font-semibold">
+                                    Saved Responses
+                                </h2>
+
+                                <p className="mt-1 text-sm text-slate-400">
+                                    Responses saved for future reference
+                                </p>
+                            </div>
+
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowSavedResponses(false);
+                                }}
+                                className="
+                        rounded-lg px-3 py-2
+                        text-slate-400
+                        transition
+                        hover:bg-white/5
+                        hover:text-white
+                    "
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        <div className="mt-6 space-y-4">
+                            {savedResponses.length === 0 && (
+                                <div
+                                    className="
+                            rounded-xl
+                            border border-white/10
+                            p-5 text-center
+                            text-sm text-slate-400
+                        "
+                                >
+                                    No saved responses yet.
+                                </div>
+                            )}
+
+                            {savedResponses.map((savedResponse) => (
+                                <SavedResponseCard
+                                    key={savedResponse.id}
+                                    response={savedResponse}
+                                    onDelete={async () => {
+                                        try {
+                                            await deleteSavedAiResponse(savedResponse.id);
+
+                                            setSavedResponses((currentResponses) =>
+                                                currentResponses.filter(
+                                                    (response) =>
+                                                        response.id !== savedResponse.id,
+                                                ),
+                                            );
+                                        } catch (caughtError) {
+                                            console.error(
+                                                "Unable to delete saved AI response:",
+                                                caughtError,
+                                            );
+
+                                            setError(
+                                                caughtError instanceof Error
+                                                    ? caughtError.message
+                                                    : "Unable to delete saved response.",
+                                            );
+                                        }
+                                    }}
+                                />
+                            ))}
+                        </div>
+                    </aside>
+                </>
+            )}
         </main>
     );
 }
@@ -503,23 +722,48 @@ function DateField({
 type ChatPanelProps = {
     messages: ChatMessage[];
     isLoading: boolean;
+    onSave: (
+        message: ChatMessage,
+        index: number,
+    ) => void;
+    onOpenSaved: () => void;
 };
 
 
 function ChatPanel({
     messages,
     isLoading,
+    onSave,
+    onOpenSaved,
 }: ChatPanelProps) {
     return (
         <section className="flex min-h-[650px] flex-col rounded-2xl border border-white/10 bg-slate-900">
-            <div className="border-b border-white/10 px-6 py-5">
-                <h2 className="font-semibold">
-                    Conversation
-                </h2>
+            <div className="flex items-center justify-between border-b border-white/10 px-6 py-5">
+                <div>
+                    <h2 className="font-semibold">
+                        Conversation
+                    </h2>
 
-                <p className="mt-1 text-sm text-slate-400">
-                    Travel-related questions only
-                </p>
+                    <p className="mt-1 text-sm text-slate-400">
+                        Travel-related questions only
+                    </p>
+                </div>
+
+                <button
+                    type="button"
+                    onClick={onOpenSaved}
+                    className="
+            flex items-center gap-2
+            rounded-xl border border-white/10
+            px-3 py-2 text-sm text-slate-300
+            transition hover:border-cyan-400/40
+            hover:bg-white/5 hover:text-cyan-300
+        "
+                >
+                    <HiOutlineBookmark className="h-5 w-5" />
+
+                    Saved Responses
+                </button>
             </div>
 
             <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-6">
@@ -622,6 +866,29 @@ function ChatPanel({
                                 {message.content}
                             </p>
                         )}
+                        {message.role === "assistant" && (
+                            <button
+                                type="button"
+                                onClick={() => onSave(message, index)}
+                                disabled={message.saved}
+                                className="
+            mt-3 flex items-center gap-1.5
+            text-xs font-medium text-slate-400
+            transition hover:text-cyan-300
+            disabled:text-cyan-400
+        "
+                            >
+                                {message.saved ? (
+                                    <HiBookmark className="h-4 w-4" />
+                                ) : (
+                                    <HiOutlineBookmark className="h-4 w-4" />
+                                )}
+
+                                {message.saved
+                                    ? "Saved"
+                                    : "Save response"}
+                            </button>
+                        )}
                     </div>
                 ))}
 
@@ -632,5 +899,92 @@ function ChatPanel({
                 )}
             </div>
         </section>
+    );
+}
+
+type SavedResponseCardProps = {
+    response: SavedAiResponse;
+    onDelete: () => void;
+};
+
+
+function SavedResponseCard({
+    response,
+    onDelete,
+}: SavedResponseCardProps) {
+    const [expanded, setExpanded] = useState(false);
+
+    return (
+        <article
+            className="
+                rounded-xl
+                border border-white/10
+                bg-slate-900 p-4
+            "
+        >
+            <h3 className="font-medium text-white">
+                {response.title
+                    || "Saved travel response"}
+            </h3>
+
+            <p className="mt-1 text-xs text-slate-500">
+                {new Date(
+                    response.saved_at.endsWith("Z")
+                        ? response.saved_at
+                        : `${response.saved_at}Z`
+                ).toLocaleString("en-SG", {
+                    timeZone: "Asia/Singapore",
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                })}
+            </p>
+
+            {expanded && (
+                <div
+                    className="
+                        mt-4 border-t border-white/10
+                        pt-4 text-sm
+                        text-slate-300
+                    "
+                >
+                    <ReactMarkdown>
+                        {response.ai_response}
+                    </ReactMarkdown>
+                </div>
+            )}
+
+            <div className="mt-4 flex gap-3">
+                <button
+                    type="button"
+                    onClick={() => {
+                        setExpanded((current) => !current);
+                    }}
+                    className="
+                        text-xs font-medium
+                        text-cyan-400
+                        hover:text-cyan-300
+                    "
+                >
+                    {expanded
+                        ? "Hide"
+                        : "View response"}
+                </button>
+
+                <button
+                    type="button"
+                    onClick={onDelete}
+                    className="
+                        text-xs font-medium
+                        text-red-400
+                        hover:text-red-300
+                    "
+                >
+                    Delete
+                </button>
+            </div>
+        </article>
     );
 }

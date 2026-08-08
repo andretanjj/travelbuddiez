@@ -5,6 +5,9 @@ from app.schemas.assistant_schema import (
     AssistantRequest,
     AssistantResponse,
 )
+from app.schemas.saved_ai_resp_schema import (
+    SaveAiResponseRequest,
+)
 from app.services.ai_chatbot_service.assistant_intent_service import classify_assistant_intent
 from app.services.ai_chatbot_service.assistant_service import generate_assistant_reply
 from app.services.ai_chatbot_service.destination_context_service import (
@@ -16,6 +19,11 @@ from app.services.ai_chatbot_service.destination_context_service import (
 from app.services.ai_chatbot_service.assistant_price_service import (
     resolve_flight_price_data,
     resolve_hotel_price_data,
+)
+from app.services.ai_chatbot_service.saved_ai_resp_service import (
+    save_ai_response_for_user,
+    get_saved_ai_responses_for_user,
+    delete_saved_ai_response_for_user,
 )
 from app.services.saved_travel_service import (
     get_saved_flights_for_user,
@@ -495,3 +503,35 @@ def extract_question_text(message: str) -> str:
         return message[index + len(marker):].strip()
 
     return message.strip()
+
+@router.post("/saved-responses")
+def create_saved_ai_response(
+    request: SaveAiResponseRequest,
+    current_user=Depends(get_current_active_user),
+):
+    saved_response = save_ai_response_for_user(
+        username=current_user.username,
+        title=request.title,
+        user_message=request.user_message,
+        ai_response=request.ai_response,
+    )
+
+    return saved_response
+
+@router.get("/saved-responses")
+def read_saved_ai_responses(
+    current_user=Depends(get_current_active_user),
+):
+    return get_saved_ai_responses_for_user(
+        username=current_user.username,
+    )
+
+@router.delete("/saved-responses/{response_id}")
+def remove_saved_ai_response(
+    response_id: int,
+    current_user=Depends(get_current_active_user),
+):
+    return delete_saved_ai_response_for_user(
+        username=current_user.username,
+        saved_response_id=response_id,
+    )

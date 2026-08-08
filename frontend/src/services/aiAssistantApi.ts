@@ -150,3 +150,92 @@ export async function sendMessageToAiAssistant(
 
   return response.json() as Promise<AiAssistantResponse>;
 }
+
+export async function saveAiResponse(data: {
+    title?: string;
+    user_message: string;
+    ai_response: string;
+}) {
+    const token = getToken();
+
+    if (!token) {
+        throw new Error("LOGIN_REQUIRED");
+    }
+
+    const response = await fetch(
+        `${API_BASE_URL}/assistant/saved-responses`,
+        {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(data),
+        },
+    );
+
+    if (!response.ok) {
+        const errorData = await response.json();
+
+        throw new Error(
+            errorData.detail ?? "Unable to save AI response.",
+        );
+    }
+
+    return response.json();
+}
+
+
+export async function getSavedAiResponses() {
+    const token = getToken();
+
+    if (!token) {
+        throw new Error("LOGIN_REQUIRED");
+    }
+
+    const response = await fetch(
+        `${API_BASE_URL}/assistant/saved-responses`,
+        {
+            headers: {
+                Authorization: `Bearer ${token}`,
+            },
+        },
+    );
+
+    if (!response.ok) {
+        throw new Error(
+            "Unable to load saved AI responses.",
+        );
+    }
+
+    return response.json();
+}
+
+
+export async function deleteSavedAiResponse(
+    responseId: number,
+) {
+    const token = getToken();
+
+    if (!token) {
+        throw new Error("LOGIN_REQUIRED");
+    }
+
+    const response = await fetch(
+        `${API_BASE_URL}/assistant/saved-responses/${responseId}`,
+        {
+            method: "DELETE",
+            headers: {
+                Authorization: `Bearer ${token}`,
+            },
+        },
+    );
+
+    if (!response.ok) {
+        throw new Error(
+            "Unable to delete saved AI response.",
+        );
+    }
+
+    return response.json();
+}
