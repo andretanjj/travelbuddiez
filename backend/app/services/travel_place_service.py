@@ -126,3 +126,55 @@ def search_travel_places(query: str, mode: str = "flight", limit: int = 8):
     finally:
         cur.close()
         conn.close()
+
+def resolve_destination_airport(
+    destination: str,
+) -> dict | None:
+    """
+    Resolves a destination name or city into a suitable airport.
+
+    Example:
+    - Tokyo -> HND or NRT
+    - Singapore -> SIN
+
+    City suggestions may appear first in flight mode, so this function
+    specifically returns the first airport result with an IATA code.
+    """
+
+    suggestions = search_travel_places(
+        query=destination,
+        mode="flight",
+        limit=10,
+    )
+
+    print(
+        "[TRAVEL PLACE] Suggestions for",
+        destination,
+        ":",
+        suggestions,
+    )
+
+    # Prefer a metropolitan/city IATA code, such as TYO.
+    for suggestion in suggestions:
+        if (
+            suggestion.get("type") == "city"
+            and suggestion.get("code")
+        ):
+            return suggestion
+
+    # Otherwise use an individual airport, such as HND or NRT.
+    for suggestion in suggestions:
+        if (
+            suggestion.get("type") == "airport"
+            and suggestion.get("code")
+        ):
+            return suggestion
+
+    for suggestion in suggestions:
+        if (
+            suggestion.get("type") == "airport"
+            and suggestion.get("code")
+        ):
+            return suggestion
+
+    return None

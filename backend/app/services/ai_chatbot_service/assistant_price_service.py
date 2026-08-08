@@ -101,6 +101,7 @@ def resolve_flight_price_data(
     destination: str,
     departure_date: str,
     adults: int,
+    return_date: str | None = None,
 ) -> dict[str, Any]:
     """
     Uses saved database data first.
@@ -115,6 +116,11 @@ def resolve_flight_price_data(
     origin = origin.strip().upper()
     destination = destination.strip().upper()
     departure_date = normalise_date(departure_date)
+    return_date = (
+        normalise_date(return_date)
+        if return_date
+        else None
+    )
 
     if not origin:
         raise ValueError("Flight origin is required.")
@@ -182,6 +188,7 @@ def resolve_flight_price_data(
         origin=origin,
         destination=destination,
         departure_date=departure_date,
+        return_date=return_date,
         adults=adults,
     )
 
