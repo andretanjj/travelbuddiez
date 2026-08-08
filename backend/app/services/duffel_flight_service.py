@@ -51,18 +51,84 @@ def normalise_slice(slice_data):
     else:
         stops = f"{number_of_segments - 1} stop(s)"
 
-    result = {
+    return {
+        "route": (
+            f"{first_segment['origin']['iata_code']} → "
+            f"{last_segment['destination']['iata_code']}"
+        ),
+        "departureDate": first_segment["departing_at"][:10],
+        "departureAt": first_segment.get("departing_at"),
+        "duration": slice_data["duration"],
+        "stops": stops,
+        "firstSegment": first_segment,
+        "lastSegment": last_segment,
+    }
+
+
+def normalise_duffel_offer(offer):
+    """
+    Converts a Duffel offer into the simplified FlightResult shape
+    used by the TravelBuddiez frontend.
+
+    offer["slices"][0] = outbound journey
+    offer["slices"][1] = return journey, when present
+    """
+
+    slices = offer["slices"]
+
+    # Every valid offer has an outbound slice.
+    outbound = normalise_slice(slices[0])
+
+    # A second slice means this is a round-trip offer.
+    inbound = (
+        normalise_slice(slices[1])
+        if len(slices) > 1
+        else None
+    )
+
+    total_amount = float(offer["total_amount"])
+    airline_name = offer["owner"]["name"]
+
+    outbound_first_segment = outbound["firstSegment"]
+    outbound_last_segment = outbound["lastSegment"]
+    # The first segment of the inbound slice identifies the first
+    # return flight. It is None for one-way journeys.
+    inbound_first_segment = (inbound["firstSegment"] if inbound else None)
+
+    return {
         "id": offer["id"],
         "providerItemId": offer["id"],
 
         "city": (
-            last_segment["destination"].get("city_name")
-            or last_segment["destination"].get("name")
+            outbound_last_segment["destination"].get("city_name")
+            or outbound_last_segment["destination"]["name"]
         ),
-        "country": last_segment["destination"].get("iata_country_code"),
-        "route": (
-            f"{first_segment['origin']['iata_code']} → "
-            f"{last_segment['destination']['iata_code']}"
+        "country": outbound_last_segment[
+            "destination"
+        ]["iata_country_code"],
+
+        # Outbound journey.
+        "route": outbound["route"],
+        "departureDate": outbound["departureDate"],
+        "departureAt": outbound["departureAt"],
+        "duration": outbound["duration"],
+        "stops": outbound["stops"],
+
+        # Return journey.
+        "returnRoute": (
+            inbound["route"]
+            if inbound
+            else None
+        ),
+        "returnDate": (
+            inbound["departureDate"]
+            if inbound
+            else None
+        ),
+        "returnDepartureAt": (
+            inbound["departureAt"]
+            if inbound
+            else None
         ),
         "returnDuration": (
             inbound["duration"]
@@ -93,33 +159,6 @@ def normalise_slice(slice_data):
         ),
     }
 
-    if len(offer["slices"]) > 1:
-        return_slice = offer["slices"][1]
-        return_segments = return_slice["segments"]
-
-        return_first_segment = return_segments[0]
-        return_last_segment = return_segments[-1]
-
-        return_stops_count = len(return_segments) - 1
-
-        result["returnRoute"] = (
-            f"{return_first_segment['origin']['iata_code']} → "
-            f"{return_last_segment['destination']['iata_code']}"
-        )
-        result["returnDepartureAt"] = return_first_segment.get(
-            "departing_at"
-        )
-        result["returnDate"] = return_first_segment[
-            "departing_at"
-        ][:10]
-        result["returnDuration"] = return_slice["duration"]
-        result["returnStops"] = (
-            "Direct"
-            if return_stops_count == 0
-            else f"{return_stops_count} stop(s)"
-        )
-
-    return result
 
 def search_duffel_flights(origin: str, destination: str, departure_date: str, adults: int, return_date: str | None = None):
     """
@@ -139,7 +178,6 @@ def search_duffel_flights(origin: str, destination: str, departure_date: str, ad
         origin.upper(),
         destination.upper(),
         departure_date,
-        return_date,
         adults,
     )
 
@@ -151,6 +189,9 @@ def search_duffel_flights(origin: str, destination: str, departure_date: str, ad
         "Duffel-Version": DUFFEL_API_VERSION,
     }
 
+    # Duffel represents each direction of travel as a slice.
+    # One-way journey = one slice.
+    # Round trip = outbound slice + inbound slice.
     slices = [
         {
             "origin": origin.upper(),
@@ -162,6 +203,7 @@ def search_duffel_flights(origin: str, destination: str, departure_date: str, ad
     if return_date:
         slices.append(
             {
+                # Reverse the route for the inbound journey.
                 "origin": destination.upper(),
                 "destination": origin.upper(),
                 "departure_date": return_date,
