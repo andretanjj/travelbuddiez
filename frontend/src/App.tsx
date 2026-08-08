@@ -2,7 +2,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Home from "./pages/Home.tsx";
 import ExploreMapPage from "./pages/ExploreMapPage.tsx";
 import DestinationDashboardPage from "./pages/DestinationDashboardPage.tsx";
-import ComingSoon from "./pages/ComingSoon.tsx";
+import AboutPage from "./pages/AboutPage.tsx";
 import Navbar from "./components/Navbar.tsx";
 import TravelPlanningPage from "./pages/TravelPlanningPage";
 import SavedTravelPage from "./pages/SavedTravelPage";
@@ -23,7 +23,7 @@ function App() {
           <Route path="/map" element={<ExploreMapPage />} />
           <Route path="/planning" element={<TravelPlanningPage />} />
           <Route path="/saved-travel" element={<SavedTravelPage />} />
-          <Route path="/about" element={<ComingSoon />} />
+          <Route path="/about" element={<AboutPage />} />
           {/* Authentication pages */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegistrationPage />} />
