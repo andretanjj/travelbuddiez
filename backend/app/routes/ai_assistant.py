@@ -269,8 +269,10 @@ def chat_with_assistant(
                     departure_date=str(
                         preferences.departure_date
                     ),
-                    return_date=str(
-                        preferences.return_date
+                    return_date=(
+                        str(preferences.return_date)
+                        if preferences.return_date
+                        else None
                     ),
                     adults=preferences.travellers,
                 )
