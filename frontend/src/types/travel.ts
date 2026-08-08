@@ -71,3 +71,10 @@ export interface TravelPlaceSuggestion {
 export interface TravelPlaceSuggestionResponse {
   results: TravelPlaceSuggestion[];
 }
+
+export interface CurrencyRateResponse {
+  date: string | null;
+  base: string;
+  quote: string;
+  rate: number;
+}

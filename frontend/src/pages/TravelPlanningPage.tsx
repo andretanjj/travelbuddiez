@@ -12,6 +12,7 @@ import {
 } from "../services/savedTravelApi";
 
 import {
+  getCurrencyRate,
   searchFlights,
   searchHotels,
   searchTravelPlaces,
@@ -30,6 +31,19 @@ import type {
 } from "../types/travel";
 
 type SuggestionTarget = "origin" | "destination" | "hotel";
+
+const SUPPORTED_CURRENCIES = [
+  "SGD",
+  "USD",
+  "EUR",
+  "GBP",
+  "JPY",
+  "KRW",
+  "MYR",
+  "AUD",
+] as const;
+
+type SupportedCurrency = (typeof SUPPORTED_CURRENCIES)[number];
 
 function TravelPlanningPage() {
   const [activeTab, setActiveTab] = useState<ActiveTravelTab>("flights");
@@ -72,8 +86,7 @@ function TravelPlanningPage() {
 
   // Autocomplete states.
   const [suggestions, setSuggestions] = useState<TravelPlaceSuggestion[]>([]);
-  const [activeSuggestionTarget, setActiveSuggestionTarget] =
-    useState<SuggestionTarget | null>(null);
+  const [activeSuggestionTarget, setActiveSuggestionTarget] = useState<SuggestionTarget | null>(null);
   const [isSuggestionLoading, setIsSuggestionLoading] = useState(false);
 
   // Used to avoid searching when the user just selected an option.
@@ -81,6 +94,45 @@ function TravelPlanningPage() {
 
   const targetPrice = Number(alertPrice);
   const hotelTargetPrice = Number(hotelAlertPrice);
+
+  // Load the user's last selected display currency.
+  // Defaults to SGD when no preference has been saved yet.
+  const [displayCurrency, setDisplayCurrency] = useState<SupportedCurrency>(() => {
+    const savedCurrency = localStorage.getItem("displayCurrency");
+
+    if (
+      savedCurrency &&
+      SUPPORTED_CURRENCIES.includes(
+        savedCurrency as SupportedCurrency
+      )
+    ) {
+      return savedCurrency as SupportedCurrency;
+    }
+
+    return "SGD";
+  });
+
+  // Cache rates such as "USD-SGD" -> 1.28.
+  const [currencyRates, setCurrencyRates] = useState<Record<string, number>>({});
+
+  // helper function
+  function convertPrice(amount: number, sourceCurrency: string): number {
+    // No conversion needed.
+    if (sourceCurrency === displayCurrency) {
+      return amount;
+    }
+
+    const rateKey = `${sourceCurrency}-${displayCurrency}`;
+    const rate = currencyRates[rateKey];
+
+    // If the rate has not loaded yet,
+    // temporarily return the original amount.
+    if (rate === undefined) {
+      return amount;
+    }
+
+    return amount * rate;
+  }
 
   // Used for saved travels
   const { user } = useAuth();
@@ -100,6 +152,57 @@ function TravelPlanningPage() {
         : activeSuggestionTarget === "hotel"
           ? hotelDestinationInput
           : "";
+
+  useEffect(() => {
+    // Remember the selected currency across pages and browser refreshes.
+    localStorage.setItem(
+      "displayCurrency",
+      displayCurrency
+    );
+  }, [displayCurrency]);
+  
+  useEffect(() => {
+    async function loadCurrencyRates() {
+      // Find every original currency currently displayed.
+      const sourceCurrencies = new Set<string>([
+        ...flights.map((flight) => flight.currency),
+        ...hotels.map((hotel) => hotel.currency),
+      ]);
+
+      for (const sourceCurrency of sourceCurrencies) {
+        if (sourceCurrency === displayCurrency) {
+          continue;
+        }
+
+        const rateKey =
+          `${sourceCurrency}-${displayCurrency}`;
+
+        // Reuse a previously fetched rate.
+        if (currencyRates[rateKey] !== undefined) {
+          continue;
+        }
+
+        try {
+          const response = await getCurrencyRate(
+            sourceCurrency,
+            displayCurrency
+          );
+
+          setCurrencyRates((currentRates) => ({
+            ...currentRates,
+            [rateKey]: response.rate,
+          }));
+        } catch (error) {
+          console.error(
+            `Unable to convert ${sourceCurrency} to ${displayCurrency}:`,
+            error
+          );
+        }
+      }
+    }
+
+    loadCurrencyRates();
+  }, [flights, hotels, displayCurrency, currencyRates]);        
 
   useEffect(() => {
     // Do not search if no input is active.
@@ -836,6 +939,29 @@ function TravelPlanningPage() {
           </div>
         )}
 
+        {/* Display currency selector */}
+        <div className="mb-6 flex items-center justify-end gap-3">
+          <label className="text-sm text-slate-400">
+            Display currency
+          </label>
+
+          <select
+            value={displayCurrency}
+            onChange={(event) =>
+              setDisplayCurrency(
+                event.target.value as SupportedCurrency
+              )
+            }
+            className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-amber-500"
+          >
+            {SUPPORTED_CURRENCIES.map((currency) => (
+              <option key={currency} value={currency}>
+                {currency}
+              </option>
+            ))}
+          </select>
+        </div>
+
         {/* Flight price alert */}
         {activeTab === "flights" && (
           <div className="mb-8 rounded-xl border border-slate-800 bg-slate-900 p-4">
@@ -965,7 +1091,11 @@ function TravelPlanningPage() {
                       </p>
 
                       <p className="text-2xl font-bold text-amber-500">
-                        {flight.currency} {flight.price}
+                        {displayCurrency}{" "}
+                        {convertPrice(
+                          flight.price,
+                          flight.currency
+                        ).toFixed(2)}
                       </p>
 
                       <button
@@ -1056,7 +1186,11 @@ function TravelPlanningPage() {
                       <p className="text-sm text-slate-400">total for stay</p>
 
                       <p className="text-2xl font-bold text-amber-500">
-                        {hotel.currency} {hotel.price}
+                        {displayCurrency}{" "}
+                        {convertPrice(
+                          hotel.price,
+                          hotel.currency
+                        ).toFixed(2)}
                       </p>
 
                       <button
