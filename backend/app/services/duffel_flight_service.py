@@ -30,36 +30,19 @@ def build_passengers(adults: int):
     return passengers
 
 
-def normalise_duffel_offer(offer):
+def normalise_slice(slice_data):
     """
-    Converts one Duffel offer into the simplified FlightResult shape used by frontend.
+    Converts one Duffel slice into the simplified journey details
+    used by TravelBuddiez.
 
-    Duffel offers can include connecting flights.
-    Example:
-    - Segment 1: SIN -> SGN
-    - Segment 2: SGN -> HND
-
-    For display, we should show the full slice route:
-    - SIN -> HND
+    A slice may contain one segment for a direct flight or multiple
+    segments when connections are required.
     """
 
-    first_slice = offer["slices"][0]
+    segments = slice_data["segments"]
 
-    # A direct flight has 1 segment.
-    # A connecting flight has 2 or more segments.
-    segments = first_slice["segments"]
-
-    # First segment contains the real starting airport.
     first_segment = segments[0]
-
-    # Last segment contains the final destination airport.
     last_segment = segments[-1]
-
-    # Duffel returns total_amount as a string, so convert it to float.
-    total_amount = float(offer["total_amount"])
-
-    # Duffel owner is usually the airline selling the offer.
-    airline_name = offer["owner"]["name"]
 
     number_of_segments = len(segments)
 
@@ -69,31 +52,104 @@ def normalise_duffel_offer(offer):
         stops = f"{number_of_segments - 1} stop(s)"
 
     return {
-        "id": offer["id"],
-        "providerItemId": offer["id"],
-        "city": (
-            last_segment["destination"]["city_name"]
-            or last_segment["destination"]["name"]
-        ),
-        "country": last_segment["destination"]["iata_country_code"],
         "route": (
             f"{first_segment['origin']['iata_code']} → "
             f"{last_segment['destination']['iata_code']}"
         ),
-        "price": total_amount,
-        "currency": offer["total_currency"],
-        "airline": airline_name,
-        "flightNumber": first_segment.get(
-            "marketing_carrier_flight_number"
-        ),
-        "departureAt": first_segment.get("departing_at"),
-        "duration": first_slice["duration"],
-        "stops": stops,
         "departureDate": first_segment["departing_at"][:10],
+        "departureAt": first_segment.get("departing_at"),
+        "duration": slice_data["duration"],
+        "stops": stops,
+        "firstSegment": first_segment,
+        "lastSegment": last_segment,
     }
 
 
-def search_duffel_flights(origin: str, destination: str, departure_date: str, adults: int):
+def normalise_duffel_offer(offer):
+    """
+    Converts a Duffel offer into the simplified FlightResult shape
+    used by the TravelBuddiez frontend.
+
+    offer["slices"][0] = outbound journey
+    offer["slices"][1] = return journey, when present
+    """
+
+    slices = offer["slices"]
+
+    # Every valid offer has an outbound slice.
+    outbound = normalise_slice(slices[0])
+
+    # A second slice means this is a round-trip offer.
+    inbound = (
+        normalise_slice(slices[1])
+        if len(slices) > 1
+        else None
+    )
+
+    total_amount = float(offer["total_amount"])
+    airline_name = offer["owner"]["name"]
+
+    outbound_first_segment = outbound["firstSegment"]
+    outbound_last_segment = outbound["lastSegment"]
+
+    return {
+        "id": offer["id"],
+        "providerItemId": offer["id"],
+
+        "city": (
+            outbound_last_segment["destination"].get("city_name")
+            or outbound_last_segment["destination"]["name"]
+        ),
+        "country": outbound_last_segment[
+            "destination"
+        ]["iata_country_code"],
+
+        # Outbound journey.
+        "route": outbound["route"],
+        "departureDate": outbound["departureDate"],
+        "departureAt": outbound["departureAt"],
+        "duration": outbound["duration"],
+        "stops": outbound["stops"],
+
+        # Return journey.
+        "returnRoute": (
+            inbound["route"]
+            if inbound
+            else None
+        ),
+        "returnDate": (
+            inbound["departureDate"]
+            if inbound
+            else None
+        ),
+        "returnDepartureAt": (
+            inbound["departureAt"]
+            if inbound
+            else None
+        ),
+        "returnDuration": (
+            inbound["duration"]
+            if inbound
+            else None
+        ),
+        "returnStops": (
+            inbound["stops"]
+            if inbound
+            else None
+        ),
+
+        # Duffel total_amount represents the full offer.
+        "price": total_amount,
+        "currency": offer["total_currency"],
+
+        "airline": airline_name,
+        "flightNumber": outbound_first_segment.get(
+            "marketing_carrier_flight_number"
+        ),
+    }
+
+
+def search_duffel_flights(origin: str, destination: str, departure_date: str, adults: int, return_date: str | None = None):
     """
     Calls Duffel's create offer request endpoint.
 
@@ -122,15 +178,30 @@ def search_duffel_flights(origin: str, destination: str, departure_date: str, ad
         "Duffel-Version": DUFFEL_API_VERSION,
     }
 
+    # Duffel represents each direction of travel as a slice.
+    # One-way journey = one slice.
+    # Round trip = outbound slice + inbound slice.
+    slices = [
+        {
+            "origin": origin.upper(),
+            "destination": destination.upper(),
+            "departure_date": departure_date,
+        }
+    ]
+
+    if return_date:
+        slices.append(
+            {
+                # Reverse the route for the inbound journey.
+                "origin": destination.upper(),
+                "destination": origin.upper(),
+                "departure_date": return_date,
+            }
+        )
+
     payload = {
         "data": {
-            "slices": [
-                {
-                    "origin": origin.upper(),
-                    "destination": destination.upper(),
-                    "departure_date": departure_date,
-                }
-            ],
+            "slices": slices,
             "passengers": build_passengers(adults),
             "cabin_class": "economy",
         }

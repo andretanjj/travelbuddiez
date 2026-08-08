@@ -6,17 +6,31 @@ export type ActiveTravelTab = "flights" | "hotels";
 export interface FlightResult {
   id: string;
   providerItemId: string;
+
   city: string;
   country: string;
+
+  // Outbound journey.
   route: string;
-  price: number;
-  currency: string;
-  airline: string;
-  flightNumber: string | null;
+  departureDate: string;
   departureAt: string | null;
   duration: string;
   stops: string;
-  departureDate: string;
+
+  // Return journey.
+  // These stay null for one-way searches.
+  returnRoute: string | null;
+  returnDate: string | null;
+  returnDepartureAt: string | null;
+  returnDuration: string | null;
+  returnStops: string | null;
+
+  // Price is Duffel's total offer price.
+  price: number;
+  currency: string;
+
+  airline: string;
+  flightNumber: string | null;
 }
 
 export interface HotelResult {

@@ -17,6 +17,7 @@ def search_flights(
     destination: str,
     departure_date: str,
     adults: int,
+    return_date: str | None = None,
 ):
     """
     Tries the live Duffel API first.
@@ -35,6 +36,7 @@ def search_flights(
             origin=origin,
             destination=destination,
             departure_date=departure_date,
+            return_date=return_date,
             adults=adults,
         )
 
