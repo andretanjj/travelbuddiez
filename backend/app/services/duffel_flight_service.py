@@ -68,14 +68,14 @@ def normalise_duffel_offer(offer):
     else:
         stops = f"{number_of_segments - 1} stop(s)"
 
-    return {
+    result = {
         "id": offer["id"],
         "providerItemId": offer["id"],
         "city": (
-            last_segment["destination"]["city_name"]
-            or last_segment["destination"]["name"]
+            last_segment["destination"].get("city_name")
+            or last_segment["destination"].get("name")
         ),
-        "country": last_segment["destination"]["iata_country_code"],
+        "country": last_segment["destination"].get("iata_country_code"),
         "route": (
             f"{first_segment['origin']['iata_code']} → "
             f"{last_segment['destination']['iata_code']}"
@@ -92,8 +92,35 @@ def normalise_duffel_offer(offer):
         "departureDate": first_segment["departing_at"][:10],
     }
 
+    if len(offer["slices"]) > 1:
+        return_slice = offer["slices"][1]
+        return_segments = return_slice["segments"]
 
-def search_duffel_flights(origin: str, destination: str, departure_date: str, adults: int):
+        return_first_segment = return_segments[0]
+        return_last_segment = return_segments[-1]
+
+        return_stops_count = len(return_segments) - 1
+
+        result["returnRoute"] = (
+            f"{return_first_segment['origin']['iata_code']} → "
+            f"{return_last_segment['destination']['iata_code']}"
+        )
+        result["returnDepartureAt"] = return_first_segment.get(
+            "departing_at"
+        )
+        result["returnDate"] = return_first_segment[
+            "departing_at"
+        ][:10]
+        result["returnDuration"] = return_slice["duration"]
+        result["returnStops"] = (
+            "Direct"
+            if return_stops_count == 0
+            else f"{return_stops_count} stop(s)"
+        )
+
+    return result
+
+def search_duffel_flights(origin: str, destination: str, departure_date: str, adults: int, return_date: str | None = None):
     """
     Calls Duffel's create offer request endpoint.
 
@@ -111,6 +138,7 @@ def search_duffel_flights(origin: str, destination: str, departure_date: str, ad
         origin.upper(),
         destination.upper(),
         departure_date,
+        return_date,
         adults,
     )
 
@@ -122,15 +150,26 @@ def search_duffel_flights(origin: str, destination: str, departure_date: str, ad
         "Duffel-Version": DUFFEL_API_VERSION,
     }
 
+    slices = [
+        {
+            "origin": origin.upper(),
+            "destination": destination.upper(),
+            "departure_date": departure_date,
+        }
+    ]
+
+    if return_date:
+        slices.append(
+            {
+                "origin": destination.upper(),
+                "destination": origin.upper(),
+                "departure_date": return_date,
+            }
+        )
+
     payload = {
         "data": {
-            "slices": [
-                {
-                    "origin": origin.upper(),
-                    "destination": destination.upper(),
-                    "departure_date": departure_date,
-                }
-            ],
+            "slices": slices,
             "passengers": build_passengers(adults),
             "cabin_class": "economy",
         }

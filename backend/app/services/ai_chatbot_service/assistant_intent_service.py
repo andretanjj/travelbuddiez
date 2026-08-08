@@ -99,6 +99,23 @@ SAVED_HOTEL_PHRASES = {
     "is my saved hotel still the cheapest",
 }
 
+TRIP_PRICE_PHRASES = {
+    "cheapest trip",
+    "cheapest plan",
+    "cheapest travel plan",
+    "cheapest package",
+    "budget trip",
+    "affordable trip",
+    "most affordable trip",
+    "trip price",
+    "trip prices",
+    "trip cost",
+    "total trip cost",
+    "flight and hotel",
+    "flights and hotels",
+    "flight plus hotel",
+    "flight with hotel",
+}
 
 def classify_assistant_intent(
     message: str,
@@ -134,6 +151,14 @@ def classify_assistant_intent(
         phrase in text
         for phrase in HOTEL_PRICE_PHRASES
     )
+
+    mentions_trip_price = any(
+        phrase in text
+        for phrase in TRIP_PRICE_PHRASES
+    )
+
+    if mentions_trip_price:
+        return "flight_and_hotel_price_question"
 
     if mentions_flight and mentions_hotel:
         return "flight_and_hotel_price_question"

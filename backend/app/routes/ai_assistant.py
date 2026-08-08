@@ -23,8 +23,20 @@ from app.services.saved_travel_service import (
     refresh_saved_flight_price,
     refresh_saved_hotel_price,
 )
+from app.services.travel_place_service import (
+    resolve_destination_airport,
+)
+from app.services.ai_chatbot_service.travel_preference_service import (
+    get_missing_live_price_fields,
+)
 
 from app.services.auth_service import get_current_active_user
+
+PRICE_INTENTS = {
+    "flight_price_question",
+    "hotel_price_question",
+    "flight_and_hotel_price_question",
+}
 
 router = APIRouter(
     prefix="/assistant",
@@ -69,13 +81,6 @@ def chat_with_assistant(
             has_preferences=request.travel_preferences is not None,
         )
 
-        flight_price_data = None
-        hotel_price_data = None
-        saved_item_data = None
-        missing_fields: list[str] = []
-
-        preferences = request.travel_preferences
-
         if intent == "prompt_injection":
             return AssistantResponse(
                 reply=(
@@ -106,7 +111,16 @@ def chat_with_assistant(
         saved_item_data = None
         flight_price_data = None
         hotel_price_data = None
-        missing_fields: list[str] = []
+
+        # Retrieve destination context before resolving airport codes.
+        if intent == "destination_recommendation":
+            destination_data = get_recommendation_candidates(
+                limit=10
+            )
+        elif destination_codes:
+            destination_data = get_destination_context(
+                destination_codes
+            )
 
         # Handle questions about the user's saved flights.
         if intent == "saved_flight_question":
@@ -132,122 +146,96 @@ def chat_with_assistant(
                     username=current_user.username,
                 )
 
-        if intent in {
-            "flight_price_question",
-            "flight_and_hotel_price_question",
-        }:
-            flight_missing: list[str] = []
+        # Handle new live flight/hotel searches.
+        if intent in PRICE_INTENTS:
+            preferences = request.travel_preferences
 
-            if preferences is None:
-                flight_missing.extend([
-                    "origin",
-                    "departure_date",
-                    "travellers",
-                ])
-            else:
-                if not preferences.origin:
-                    flight_missing.append("origin")
+            missing_fields = get_missing_price_fields(
+                intent=intent,
+                preferences=preferences,
+                has_destination=bool(destination_data),
+            )
 
-                if not preferences.departure_date:
-                    flight_missing.append(
-                        "departure_date"
-                    )
+            if missing_fields:
+                return AssistantResponse(
+                    reply=build_missing_information_reply(
+                        missing_fields
+                    ),
+                    intent="missing_information",
+                    destinations_used=destination_codes,
+                    missing_fields=missing_fields,
+                    data_last_updated=None,
+                )
 
-                if not preferences.travellers:
-                    flight_missing.append(
-                        "travellers"
-                    )
+            selected_destination = destination_data[0]
 
-            if not destination_codes:
-                flight_missing.append("destination")
+            destination_city = (
+                selected_destination.get("city")
+                or selected_destination.get("country_name")
+            )
 
-            missing_fields.extend(flight_missing)
+            destination_airport = (
+                resolve_destination_airport(
+                    destination=destination_city,
+                )
+            )
 
-            if not flight_missing:
+            if destination_airport is None:
+                return AssistantResponse(
+                    reply=(
+                        "I found the destination, but I could not "
+                        "find a suitable airport for the live "
+                        "price search."
+                    ),
+                    intent=intent,
+                    destinations_used=destination_codes,
+                    missing_fields=[],
+                    data_last_updated=None,
+                )
+
+            destination_airport_code = (
+                destination_airport["code"]
+            )
+
+            print(
+                "Resolved destination airport:",
+                destination_city,
+                "->",
+                destination_airport_code,
+            )
+
+            if intent in {
+                "flight_price_question",
+                "flight_and_hotel_price_question",
+            }:
                 flight_price_data = resolve_flight_price_data(
                     username=current_user.username,
                     origin=preferences.origin,
-                    destination=destination_codes[0],
+                    destination=destination_airport_code,
                     departure_date=str(
                         preferences.departure_date
                     ),
+                    return_date=str(
+                        preferences.return_date
+                    ),
                     adults=preferences.travellers,
                 )
 
-        # New or general hotel-price search
-        if intent in {
-            "hotel_price_question",
-            "flight_and_hotel_price_question",
-        }:
-            hotel_missing: list[str] = []
-
-            if preferences is None:
-                hotel_missing.extend([
-                    "check_in_date",
-                    "check_out_date",
-                    "travellers",
-                ])
-            else:
-                if not preferences.check_in_date:
-                    hotel_missing.append(
-                        "check_in_date"
-                    )
-
-                if not preferences.check_out_date:
-                    hotel_missing.append(
-                        "check_out_date"
-                    )
-
-                if not preferences.travellers:
-                    hotel_missing.append(
-                        "travellers"
-                    )
-
-            if not destination_codes:
-                hotel_missing.append("destination")
-
-            missing_fields.extend(hotel_missing)
-
-            if not hotel_missing:
+            if intent in {
+                "hotel_price_question",
+                "flight_and_hotel_price_question",
+            }:
                 hotel_price_data = resolve_hotel_price_data(
                     username=current_user.username,
-                    destination=destination_codes[0],
+                    destination=destination_airport_code,
                     check_in_date=str(
-                        preferences.check_in_date
+                        preferences.departure_date
                     ),
                     check_out_date=str(
-                        preferences.check_out_date
+                        preferences.return_date
                     ),
                     adults=preferences.travellers,
                 )
-
-        missing_fields = list(
-            dict.fromkeys(missing_fields)
-        )
-
-        if missing_fields:
-            return AssistantResponse(
-                reply=build_missing_information_reply(
-                    missing_fields
-                ),
-                intent="missing_information",
-                destinations_used=destination_codes,
-                missing_fields=missing_fields,
-                data_last_updated=None,
-            )
-
-        # Destination context
-        if intent == "destination_recommendation":
-            destination_data = (
-                get_recommendation_candidates(
-                    limit=10
-                )
-            )
-
-        elif destination_codes:
-            destination_data = get_destination_context(
-                destination_codes
-            )
 
         reply = generate_assistant_reply(
             user_message=request.message,
@@ -320,6 +308,84 @@ def chat_with_assistant(
             ),
         )
 
+def get_missing_price_fields(
+    intent: str,
+    preferences,
+    has_destination: bool,
+) -> list[str]:
+    """
+    Returns only the fields needed for the selected price-search intent.
+
+    A combined flight-and-hotel search requires:
+    - origin
+    - departure date
+    - return date
+    - travellers
+    - destination
+    """
+
+    missing_fields: list[str] = []
+
+    if not has_destination:
+        missing_fields.append("destination")
+
+    if preferences is None:
+        if intent in {
+            "flight_price_question",
+            "flight_and_hotel_price_question",
+        }:
+            missing_fields.extend([
+                "origin",
+                "departure_date",
+                "travellers",
+            ])
+
+        if intent in {
+            "hotel_price_question",
+            "flight_and_hotel_price_question",
+        }:
+            missing_fields.extend([
+                "departure_date",
+                "return_date",
+                "travellers",
+            ])
+
+        return list(dict.fromkeys(missing_fields))
+
+    if intent in {
+        "flight_price_question",
+        "flight_and_hotel_price_question",
+    }:
+        if not preferences.origin:
+            missing_fields.append("origin")
+
+        if not preferences.departure_date:
+            missing_fields.append("departure_date")
+
+        if not preferences.travellers:
+            missing_fields.append("travellers")
+
+    if intent in {
+        "hotel_price_question",
+        "flight_and_hotel_price_question",
+    }:
+        if not preferences.departure_date:
+            missing_fields.append("departure_date")
+
+        if not preferences.return_date:
+            missing_fields.append("return_date")
+
+        if not preferences.travellers:
+            missing_fields.append("travellers")
+
+    # A combined plan needs a return date for the round trip.
+    if (
+        intent == "flight_and_hotel_price_question"
+        and not preferences.return_date
+    ):
+        missing_fields.append("return_date")
+
+    return list(dict.fromkeys(missing_fields))
 
 def build_missing_information_reply(
     missing_fields: list[str],
@@ -328,9 +394,8 @@ def build_missing_information_reply(
         "origin": "departure airport",
         "destination": "destination",
         "departure_date": "departure date",
+        "return_date": "return date",
         "travellers": "number of travellers",
-        "check_in_date": "hotel check-in date",
-        "check_out_date": "hotel check-out date",
     }
 
     readable_fields = [
