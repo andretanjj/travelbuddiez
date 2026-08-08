@@ -35,6 +35,8 @@ class SaveFlightRequest(BaseModel):
     airline: str
     flight_number: str | None = None
     departure_at: str | None = None
+    return_flight_number: str | None = None
+    return_departure_at: str | None = None
     duration: str
     stops: str
     provider: str = "duffel"

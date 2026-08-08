@@ -42,6 +42,10 @@ function TravelPlanningPage() {
   const [selectedOriginCode, setSelectedOriginCode] = useState("");
   const [selectedDestinationCode, setSelectedDestinationCode] = useState("");
   const [departureDate, setDepartureDate] = useState("");
+  // Users can search either one-way or round-trip flights.
+  const [tripType, setTripType] = useState<"one-way" | "round-trip">("round-trip");
+  // Only required for round-trip searches.
+  const [returnDate, setReturnDate] = useState("");
 
   // Hotel search form states.
   // Input text is what the user sees.
@@ -212,10 +216,29 @@ function TravelPlanningPage() {
           return;
         }
 
+        if (tripType === "round-trip") {
+          if (!returnDate) {
+            setErrorMessage("Please choose a return date.");
+            return;
+          }
+
+          if (returnDate <= departureDate) {
+            setErrorMessage("Return date must be after the departure date.");
+            return;
+          }
+        }
+
         const flightResponse = await searchFlights({
           origin: selectedOriginCode,
           destination: selectedDestinationCode,
           departureDate,
+
+          // One-way flights send no return date.
+          returnDate:
+            tripType === "round-trip"
+              ? returnDate
+              : undefined,
+
           adults,
         });
 
@@ -291,17 +314,16 @@ function TravelPlanningPage() {
   }
 
   function findSavedFlight(flight: FlightResult): SavedFlight | undefined {
-    /*
-      Duffel result IDs are not currently stored in saved_flights.
-
-      Therefore, identify the saved result using its important snapshot fields.
-    */
-
     return savedFlights.find(
       (savedFlight) =>
         savedFlight.origin_code === selectedOriginCode &&
         savedFlight.destination_code === selectedDestinationCode &&
         savedFlight.departure_date === flight.departureDate &&
+
+        // Distinguish one-way and round-trip snapshots.
+        (savedFlight.return_date ?? null) ===
+          (flight.returnDate ?? null) &&
+
         savedFlight.airline === flight.airline &&
         Number(savedFlight.saved_price) === Number(flight.price)
     );
@@ -369,12 +391,14 @@ function TravelPlanningPage() {
         destination_code: selectedDestinationCode,
         destination_name: destinationInput,
         departure_date: flight.departureDate,
-        return_date: null,
+        return_date: flight.returnDate,
         price: flight.price,
         currency: flight.currency,
         airline: flight.airline,
         flight_number: flight.flightNumber,
         departure_at: flight.departureAt,
+        return_flight_number: flight.returnFlightNumber,
+        return_departure_at: flight.returnDepartureAt,
         duration: flight.duration,
         stops: flight.stops,
         provider: "duffel",
@@ -578,7 +602,43 @@ function TravelPlanningPage() {
         >
           {activeTab === "flights" ? (
             <>
-              <div className="grid gap-4 md:grid-cols-4">
+              {/* Flight trip type */}
+              <div className="mb-4 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTripType("round-trip");
+                  }}
+                  className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
+                    tripType === "round-trip"
+                      ? "border-amber-500 bg-amber-500 text-slate-950"
+                      : "border-slate-700 bg-slate-950 text-slate-300"
+                  }`}
+                >
+                  Round trip
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTripType("one-way");
+
+                    // A one-way search must not accidentally send an old return date.
+                    setReturnDate("");
+                  }}
+                  className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
+                    tripType === "one-way"
+                      ? "border-amber-500 bg-amber-500 text-slate-950"
+                      : "border-slate-700 bg-slate-950 text-slate-300"
+                  }`}
+                >
+                  One way
+                </button>
+              </div>
+
+              <div
+                className={`grid gap-4 ${tripType === "round-trip" ? "md:grid-cols-5" : "md:grid-cols-4"}`}
+              >
                 <div className="relative">
                   <label className="mb-2 block text-sm text-slate-400">
                     From
@@ -639,6 +699,23 @@ function TravelPlanningPage() {
                     className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-amber-500"
                   />
                 </div>
+
+                {tripType === "round-trip" && (
+                <div>
+                  <label className="mb-2 block text-sm text-slate-400">
+                    Return date
+                  </label>
+
+                  <input
+                    type="date"
+                    value={returnDate}
+                    min={departureDate || undefined}
+                    onChange={(event) => setReturnDate(event.target.value)}
+                    required
+                    className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-amber-500"
+                  />
+                </div>
+)}
 
                 <div>
                   <label className="mb-2 block text-sm text-slate-400">
@@ -835,17 +912,45 @@ function TravelPlanningPage() {
                         {flight.city}, {flight.country}
                       </h3>
 
-                      <p className="text-sm text-slate-400">
-                        {flight.route}
-                      </p>
+                      {/* Outbound journey */}
+                      <div className="mt-2">
+                        <p className="text-sm font-medium text-slate-300">
+                          Outbound
+                        </p>
 
-                      <p className="mt-1 text-sm text-slate-400">
-                        {flight.airline} · {flight.duration} · {flight.stops}
-                      </p>
+                        <p className="text-sm text-slate-400">
+                          {flight.route}
+                        </p>
 
-                      <p className="mt-1 text-sm text-slate-500">
-                        Departure: {flight.departureDate}
-                      </p>
+                        <p className="mt-1 text-sm text-slate-400">
+                          {flight.airline} · {flight.duration} · {flight.stops}
+                        </p>
+
+                        <p className="mt-1 text-sm text-slate-500">
+                          Departure: {flight.departureDate}
+                        </p>
+                      </div>
+
+                      {/* Only show this section when Duffel returned a return slice. */}
+                      {flight.returnRoute && (
+                        <div className="mt-4">
+                          <p className="text-sm font-medium text-slate-300">
+                            Return
+                          </p>
+
+                          <p className="text-sm text-slate-400">
+                            {flight.returnRoute}
+                          </p>
+
+                          <p className="mt-1 text-sm text-slate-400">
+                            {flight.returnDuration} · {flight.returnStops}
+                          </p>
+
+                          <p className="mt-1 text-sm text-slate-500">
+                            Departure: {flight.returnDate}
+                          </p>
+                        </div>
+                      )}
 
                       {isBelowTarget && (
                         <p className="mt-3 text-sm text-green-400">
@@ -855,7 +960,9 @@ function TravelPlanningPage() {
                     </div>
 
                     <div className="text-left md:text-right">
-                      <p className="text-sm text-slate-400">from</p>
+                      <p className="text-sm text-slate-400">
+                        {flight.returnDate ? "round-trip total" : "total"}
+                      </p>
 
                       <p className="text-2xl font-bold text-amber-500">
                         {flight.currency} {flight.price}

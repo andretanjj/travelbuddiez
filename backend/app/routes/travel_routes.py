@@ -26,6 +26,14 @@ def get_flight_results(
         alias="departureDate",
         description="Departure date in YYYY-MM-DD format",
     ),
+    return_date: str | None = Query(
+        None,
+        alias="returnDate",
+        description=(
+            "Optional return date in YYYY-MM-DD format. "
+            "If omitted, the search is one-way."
+        ),
+    ),
     adults: int = Query(
         1,
         ge=1,
@@ -48,12 +56,18 @@ def get_flight_results(
         origin=origin,
         destination=destination,
         departure_date=departure_date,
+        return_date=return_date,
         adults=adults,
     )
 
     logger.info(
-        "[FLIGHT SEARCH] Returning %s flight result(s) to frontend",
-        len(flights),
+        "[FLIGHT SEARCH] Request received: %s → %s, "
+        "departure=%s, return=%s, adults=%s",
+        origin.upper(),
+        destination.upper(),
+        departure_date,
+        return_date,
+        adults,
     )
 
     return {

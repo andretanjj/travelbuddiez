@@ -30,36 +30,19 @@ def build_passengers(adults: int):
     return passengers
 
 
-def normalise_duffel_offer(offer):
+def normalise_slice(slice_data):
     """
-    Converts one Duffel offer into the simplified FlightResult shape used by frontend.
+    Converts one Duffel slice into the simplified journey details
+    used by TravelBuddiez.
 
-    Duffel offers can include connecting flights.
-    Example:
-    - Segment 1: SIN -> SGN
-    - Segment 2: SGN -> HND
-
-    For display, we should show the full slice route:
-    - SIN -> HND
+    A slice may contain one segment for a direct flight or multiple
+    segments when connections are required.
     """
 
-    first_slice = offer["slices"][0]
+    segments = slice_data["segments"]
 
-    # A direct flight has 1 segment.
-    # A connecting flight has 2 or more segments.
-    segments = first_slice["segments"]
-
-    # First segment contains the real starting airport.
     first_segment = segments[0]
-
-    # Last segment contains the final destination airport.
     last_segment = segments[-1]
-
-    # Duffel returns total_amount as a string, so convert it to float.
-    total_amount = float(offer["total_amount"])
-
-    # Duffel owner is usually the airline selling the offer.
-    airline_name = offer["owner"]["name"]
 
     number_of_segments = len(segments)
 
@@ -71,6 +54,7 @@ def normalise_duffel_offer(offer):
     result = {
         "id": offer["id"],
         "providerItemId": offer["id"],
+
         "city": (
             last_segment["destination"].get("city_name")
             or last_segment["destination"].get("name")
@@ -80,16 +64,33 @@ def normalise_duffel_offer(offer):
             f"{first_segment['origin']['iata_code']} → "
             f"{last_segment['destination']['iata_code']}"
         ),
+        "returnDuration": (
+            inbound["duration"]
+            if inbound
+            else None
+        ),
+        "returnStops": (
+            inbound["stops"]
+            if inbound
+            else None
+        ),
+
+        "returnFlightNumber": (
+            inbound_first_segment.get(
+                "marketing_carrier_flight_number"
+            )
+            if inbound_first_segment
+            else None
+        ),
+
+        # Duffel total_amount represents the full offer.
         "price": total_amount,
         "currency": offer["total_currency"],
+
         "airline": airline_name,
-        "flightNumber": first_segment.get(
+        "flightNumber": outbound_first_segment.get(
             "marketing_carrier_flight_number"
         ),
-        "departureAt": first_segment.get("departing_at"),
-        "duration": first_slice["duration"],
-        "stops": stops,
-        "departureDate": first_segment["departing_at"][:10],
     }
 
     if len(offer["slices"]) > 1:
@@ -204,7 +205,7 @@ def search_duffel_flights(origin: str, destination: str, departure_date: str, ad
 
     normalised_offers = []
 
-    for offer in offers[:20]:
+    for offer in offers:
         try:
             owner = offer.get("owner", {})
             owner_name = owner.get("name", "")

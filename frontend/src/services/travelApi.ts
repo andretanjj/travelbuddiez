@@ -18,6 +18,7 @@ export async function searchFlights(params: {
   origin: string;
   destination: string;
   departureDate: string;
+  returnDate?: string;
   adults: number;
 }): Promise<FlightSearchResponse> {
   // URLSearchParams safely builds query strings like:
@@ -28,6 +29,11 @@ export async function searchFlights(params: {
     departureDate: params.departureDate,
     adults: String(params.adults),
   });
+
+  // Only include returnDate for round-trip searches.
+  if (params.returnDate) {
+    queryParams.set("returnDate", params.returnDate);
+  }
 
   const response = await fetch(
     `${API_BASE_URL}/travel/flights/search?${queryParams.toString()}`
