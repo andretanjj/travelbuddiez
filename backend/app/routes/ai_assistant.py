@@ -24,6 +24,7 @@ from app.services.saved_travel_service import (
     refresh_saved_hotel_price,
 )
 from app.services.travel_place_service import (
+    find_travel_place_in_message,
     resolve_destination_airport,
 )
 from app.services.ai_chatbot_service.travel_preference_service import (
@@ -169,23 +170,61 @@ def chat_with_assistant(
 
             selected_destination = destination_data[0]
 
-            destination_city = (
-                selected_destination.get("city")
-                or selected_destination.get("country_name")
+            # First try to detect a city or airport directly from the user's question.
+            #
+            # Example:
+            # "Find me the cheapest trip to Tokyo"
+            # -> detects Tokyo / TYO
+            question_text = extract_question_text(
+                request.message
             )
 
-            destination_airport = (
-                resolve_destination_airport(
+            print(
+                "[ASSISTANT] Question used for place detection:",
+                question_text,
+            )
+
+            requested_place = find_travel_place_in_message(
+                message=question_text,
+                mode="flight",
+            )
+
+            print(
+                "[ASSISTANT] Place detected from message:",
+                requested_place,
+            )
+
+            if (
+                requested_place is not None
+                and requested_place.get("code")
+            ):
+                destination_place = requested_place
+
+            else:
+                # No specific city/airport was mentioned in the question.
+                # Fall back to the default city stored in destinations.
+                destination_city = (
+                    selected_destination.get("city")
+                    or selected_destination.get("country_name")
+                )
+
+                print(
+                    "[ASSISTANT] No place detected from message. "
+                    "Falling back to:",
+                    destination_city,
+                )
+
+                destination_place = resolve_destination_airport(
                     destination=destination_city,
                 )
-            )
 
-            if destination_airport is None:
+
+            if destination_place is None:
                 return AssistantResponse(
                     reply=(
                         "I found the destination, but I could not "
-                        "find a suitable airport for the live "
-                        "price search."
+                        "find a suitable airport or city for the "
+                        "live price search."
                     ),
                     intent=intent,
                     destinations_used=destination_codes,
@@ -193,13 +232,28 @@ def chat_with_assistant(
                     data_last_updated=None,
                 )
 
-            destination_airport_code = (
-                destination_airport["code"]
-            )
+
+            destination_airport_code = destination_place["code"].upper()
+            origin_airport_code = preferences.origin.upper()
+
+
+            # Safety check:
+            # prevent accidental searches such as SIN -> SIN
+            if destination_airport_code == origin_airport_code:
+                return AssistantResponse(
+                    reply=(
+                        "I could not determine the destination airport correctly. "
+                        "Please specify the city you want to travel to."
+                    ),
+                    intent=intent,
+                    destinations_used=destination_codes,
+                    missing_fields=[],
+                    data_last_updated=None,
+                )
 
             print(
-                "Resolved destination airport:",
-                destination_city,
+                "[ASSISTANT] Resolved live search destination:",
+                destination_place.get("name"),
                 "->",
                 destination_airport_code,
             )
@@ -210,7 +264,7 @@ def chat_with_assistant(
             }:
                 flight_price_data = resolve_flight_price_data(
                     username=current_user.username,
-                    origin=preferences.origin,
+                    origin=origin_airport_code,
                     destination=destination_airport_code,
                     departure_date=str(
                         preferences.departure_date
@@ -415,3 +469,27 @@ def build_missing_information_reply(
         "To search current flight or hotel prices, "
         f"please provide your {joined_fields}."
     )
+
+def extract_question_text(message: str) -> str:
+    """
+    Extracts only the user's actual question from a frontend-formatted
+    assistant message.
+
+    Example:
+        Destination: japan
+        Departure airport: SIN
+        ...
+        Question: cheapest trip to Tokyo
+
+    Returns:
+        cheapest trip to Tokyo
+    """
+
+    marker = "Question:"
+
+    if marker.casefold() in message.casefold():
+        index = message.casefold().find(marker.casefold())
+
+        return message[index + len(marker):].strip()
+
+    return message.strip()

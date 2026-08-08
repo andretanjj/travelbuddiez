@@ -1,5 +1,5 @@
 from app.database import get_connection
-
+import re
 
 def search_travel_places(query: str, mode: str = "flight", limit: int = 8):
     """
@@ -127,6 +127,73 @@ def search_travel_places(query: str, mode: str = "flight", limit: int = 8):
         cur.close()
         conn.close()
 
+def find_travel_place_in_message(
+    message: str,
+    mode: str = "flight",
+) -> dict | None:
+    """
+    Detects a destination from a natural-language travel question.
+
+    Examples:
+    - "Find me the cheapest flight to Tokyo" -> Tokyo
+    - "Show me flights to Osaka" -> Osaka
+    """
+
+    cleaned_message = message.strip()
+
+    if not cleaned_message:
+        return None
+
+    destination_match = re.search(
+        r"\bto\s+([A-Za-z][A-Za-z\s\-']*?)(?:\?|$|,|\.)",
+        cleaned_message,
+        flags=re.IGNORECASE,
+    )
+
+    if destination_match is None:
+        return None
+
+    destination_query = destination_match.group(1).strip()
+
+    print(
+        "[TRAVEL PLACE] Extracted destination:",
+        destination_query,
+    )
+
+    suggestions = search_travel_places(
+        query=destination_query,
+        mode=mode,
+        limit=10,
+    )
+
+    print(
+        "[TRAVEL PLACE] Search results:",
+        suggestions,
+    )
+
+    # Prefer city/metropolitan code, e.g. TYO.
+    for suggestion in suggestions:
+        if (
+            suggestion.get("type") == "city"
+            and suggestion.get("code")
+        ):
+            return suggestion
+
+    # Otherwise use an airport, e.g. HND/NRT.
+    for suggestion in suggestions:
+        if (
+            suggestion.get("type") == "airport"
+            and suggestion.get("code")
+        ):
+            return suggestion
+
+    # Final fallback.
+    for suggestion in suggestions:
+        if suggestion.get("code"):
+            return suggestion
+
+    return None
+
 def resolve_destination_airport(
     destination: str,
 ) -> dict | None:
@@ -170,11 +237,9 @@ def resolve_destination_airport(
         ):
             return suggestion
 
+    # Final fallback: use any valid travel-place code.
     for suggestion in suggestions:
-        if (
-            suggestion.get("type") == "airport"
-            and suggestion.get("code")
-        ):
+        if suggestion.get("code"):
             return suggestion
 
     return None
