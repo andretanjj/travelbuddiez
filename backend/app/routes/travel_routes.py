@@ -1,10 +1,12 @@
 import logging
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 
 from app.services.travel_planning_service import search_flights, search_hotels
 
 from app.services.travel_place_service import search_travel_places
+
+from app.services.currency_service import get_exchange_rate
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -142,3 +144,47 @@ def get_travel_place_suggestions(
     return {
         "results": search_travel_places(query=query, mode=mode),
     }
+
+
+@router.get("/currency/rate")
+def get_currency_rate(
+    from_currency: str = Query(
+        ...,
+        alias="from",
+        min_length=3,
+        max_length=3,
+        description="Source currency code, e.g. USD",
+    ),
+    to_currency: str = Query(
+        ...,
+        alias="to",
+        min_length=3,
+        max_length=3,
+        description="Target currency code, e.g. SGD",
+    ),
+):
+    """
+    Returns the latest exchange rate used for display conversion.
+
+    The original Duffel/LiteAPI prices are never changed.
+    """
+
+    try:
+        return get_exchange_rate(
+            from_currency=from_currency,
+            to_currency=to_currency,
+        )
+
+    except ValueError as error:
+        # Unsupported user input.
+        raise HTTPException(
+            status_code=400,
+            detail=str(error),
+        )
+
+    except RuntimeError as error:
+        # Frankfurter request failed.
+        raise HTTPException(
+            status_code=502,
+            detail=str(error),
+        )

@@ -1,4 +1,5 @@
 import type {
+  CurrencyRateResponse,
   FlightSearchResponse,
   HotelSearchResponse,
   TravelPlaceSuggestionResponse,
@@ -85,6 +86,27 @@ export async function searchTravelPlaces(
 
   const response = await fetch(
     `${API_BASE_URL}/travel/places?${queryParams.toString()}`
+  );
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response));
+  }
+
+  return response.json();
+}
+
+
+export async function getCurrencyRate(
+  fromCurrency: string,
+  toCurrency: string
+): Promise<CurrencyRateResponse> {
+  const queryParams = new URLSearchParams({
+    from: fromCurrency,
+    to: toCurrency,
+  });
+
+  const response = await fetch(
+    `${API_BASE_URL}/travel/currency/rate?${queryParams.toString()}`
   );
 
   if (!response.ok) {

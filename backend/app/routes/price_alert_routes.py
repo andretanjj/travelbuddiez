@@ -30,6 +30,13 @@ class CreatePriceAlertRequest(BaseModel):
         description="Price threshold that triggers the alert",
     )
 
+    target_currency: str = Field(
+        ...,
+        min_length=3,
+        max_length=3,
+        description="Currency selected by the user, e.g. SGD",
+    )
+
 
 @router.post("/flights/{saved_flight_id}")
 def create_flight_alert(
@@ -45,6 +52,7 @@ def create_flight_alert(
         username=current_user.username,
         saved_flight_id=saved_flight_id,
         target_price=request.target_price,
+        target_currency=request.target_currency,
     )
 
 
@@ -62,6 +70,7 @@ def create_hotel_alert(
         username=current_user.username,
         saved_hotel_id=saved_hotel_id,
         target_price=request.target_price,
+        target_currency=request.target_currency,
     )
 
 

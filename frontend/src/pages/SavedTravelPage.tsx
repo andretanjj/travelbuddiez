@@ -23,6 +23,8 @@ import type { PriceAlert } from "../types/priceAlert";
 
 import type { SavedFlight, SavedHotel } from "../types/savedTravel";
 
+import { getCurrencyRate } from "../services/travelApi";
+
 function getPriceStatusLabel(priceStatus: string): string {
   //Converts backend price status into user-friendly text.
 
@@ -44,6 +46,19 @@ function getPriceStatusLabel(priceStatus: string): string {
 
   return "Saved snapshot";
 }
+
+const SUPPORTED_CURRENCIES = [
+  "SGD",
+  "USD",
+  "EUR",
+  "GBP",
+  "JPY",
+  "KRW",
+  "MYR",
+  "AUD",
+] as const;
+
+type SupportedCurrency = (typeof SUPPORTED_CURRENCIES)[number];
 
 function SavedTravelPage() {
   const { user, isLoading: isAuthLoading } = useAuth();
@@ -67,6 +82,109 @@ function SavedTravelPage() {
 
   // Tracks the saved item currently being deleted.
   const [deletingItem, setDeletingItem] = useState<string | null>(null);
+
+  // Shared display-currency preference.
+  // Uses the same localStorage key as TravelPlanningPage.
+  const [displayCurrency, setDisplayCurrency] =
+    useState<SupportedCurrency>(() => {
+      const savedCurrency =
+        localStorage.getItem("displayCurrency");
+
+      if (
+        savedCurrency &&
+        SUPPORTED_CURRENCIES.includes(
+          savedCurrency as SupportedCurrency
+        )
+      ) {
+        return savedCurrency as SupportedCurrency;
+      }
+
+      return "SGD";
+    });
+
+  // Cache exchange rates such as USD-SGD.
+  const [currencyRates, setCurrencyRates] = useState<Record<string, number>>({});
+
+  function convertPrice(
+    amount: number,
+    sourceCurrency: string
+  ): number {
+    if (sourceCurrency === displayCurrency) {
+      return amount;
+    }
+
+    const rateKey =
+      `${sourceCurrency}-${displayCurrency}`;
+
+    const rate = currencyRates[rateKey];
+
+    // Keep original value temporarily while the rate loads.
+    if (rate === undefined) {
+      return amount;
+    }
+
+    return amount * rate;
+  }
+
+  useEffect(() => {
+    // Remember the selected currency across pages and browser refreshes.
+    localStorage.setItem(
+      "displayCurrency",
+      displayCurrency
+    );
+  }, [displayCurrency]);
+
+  useEffect(() => {
+    async function loadCurrencyRates() {
+      // Collect all provider currencies currently stored
+      // in the user's saved travel.
+      const sourceCurrencies = new Set<string>([
+        ...savedFlights.map(
+          (flight) => flight.currency
+        ),
+        ...savedHotels.map(
+          (hotel) => hotel.currency
+        ),
+      ]);
+
+      for (const sourceCurrency of sourceCurrencies) {
+        if (sourceCurrency === displayCurrency) {
+          continue;
+        }
+
+        const rateKey =
+          `${sourceCurrency}-${displayCurrency}`;
+
+        if (currencyRates[rateKey] !== undefined) {
+          continue;
+        }
+
+        try {
+          const response = await getCurrencyRate(
+            sourceCurrency,
+            displayCurrency
+          );
+
+          setCurrencyRates((currentRates) => ({
+            ...currentRates,
+            [rateKey]: response.rate,
+          }));
+        } catch (error) {
+          console.error(
+            `Unable to convert ${sourceCurrency} to ${displayCurrency}:`,
+            error
+          );
+        }
+      }
+    }
+
+    loadCurrencyRates();
+  }, [
+    savedFlights,
+    savedHotels,
+    displayCurrency,
+    currencyRates,
+  ]);
 
   useEffect(() => {
     async function loadSavedTravel() {
@@ -166,7 +284,6 @@ function SavedTravelPage() {
 
   async function handleSetFlightAlert(
     savedFlightId: number,
-    currency: string
   ) {
     /*
       Creates a new alert or updates the existing active alert.
@@ -187,7 +304,8 @@ function SavedTravelPage() {
     try {
       const updatedAlert = await createFlightPriceAlert(
         savedFlightId,
-        targetPrice
+        targetPrice,
+        displayCurrency
       );
 
       setPriceAlerts((currentAlerts) => {
@@ -212,7 +330,7 @@ function SavedTravelPage() {
       }));
 
       setMessage(
-        `Flight price alert set for ${currency} ${targetPrice}.`
+        `Flight price alert set for ${displayCurrency} ${targetPrice}.`
       );
     } catch (error) {
       if (error instanceof Error) {
@@ -256,8 +374,7 @@ function SavedTravelPage() {
   }
 
   async function handleSetHotelAlert(
-    savedHotelId: number,
-    currency: string
+    savedHotelId: number
   ) {
     /*
       Creates a new hotel alert or updates its existing active alert.
@@ -277,7 +394,8 @@ function SavedTravelPage() {
     try {
       const updatedAlert = await createHotelPriceAlert(
         savedHotelId,
-        targetPrice
+        targetPrice,
+        displayCurrency,
       );
 
       setPriceAlerts((currentAlerts) => {
@@ -300,7 +418,7 @@ function SavedTravelPage() {
       }));
 
       setMessage(
-        `Hotel price alert set for ${currency} ${targetPrice}.`
+        `Hotel price alert set for ${displayCurrency} ${targetPrice}.`
       );
     } catch (error) {
       if (error instanceof Error) {
@@ -528,6 +646,29 @@ function SavedTravelPage() {
           <p className="mb-6 text-slate-400">Loading saved travel...</p>
         )}
 
+        {/* Display currency selector */}
+        <div className="mb-6 flex items-center justify-end gap-3">
+          <label className="text-sm text-slate-400">
+            Display currency
+          </label>
+
+          <select
+            value={displayCurrency}
+            onChange={(event) =>
+              setDisplayCurrency(
+                event.target.value as SupportedCurrency
+              )
+            }
+            className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-amber-500"
+          >
+            {SUPPORTED_CURRENCIES.map((currency) => (
+              <option key={currency} value={currency}>
+                {currency}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <section className="mb-10">
           <div className="mb-4 flex items-center gap-2">
             <Plane className="h-5 w-5 text-amber-400" />
@@ -557,9 +698,49 @@ function SavedTravelPage() {
                     {flight.airline} · {flight.duration} · {flight.stops}
                   </p>
 
-                  <p className="mt-1 text-sm text-slate-500">
-                    Departure: {flight.departure_date}
-                  </p>
+                  {flight.return_date && (
+                    <div className="mt-3 rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-2">
+                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                        Return journey
+                      </p>
+
+                      <p className="mt-1 text-sm text-slate-300">
+                        {flight.destination_code} → {flight.origin_code}
+                      </p>
+
+                      {flight.return_flight_number && (
+                        <p className="mt-1 text-xs text-slate-500">
+                          Flight: {flight.return_flight_number}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {flight.return_date ? (
+                    <>
+                      <p className="mt-2 inline-flex rounded-full border border-blue-400/30 bg-blue-400/10 px-2 py-1 text-xs font-medium text-blue-300">
+                        Round trip
+                      </p>
+
+                      <p className="mt-2 text-sm text-slate-500">
+                        Outbound: {flight.departure_date}
+                      </p>
+
+                      <p className="mt-1 text-sm text-slate-500">
+                        Return: {flight.return_date}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="mt-2 inline-flex rounded-full border border-slate-600 bg-slate-800 px-2 py-1 text-xs font-medium text-slate-300">
+                        One way
+                      </p>
+
+                      <p className="mt-2 text-sm text-slate-500">
+                        Departure: {flight.departure_date}
+                      </p>
+                    </>
+                  )}
 
                   <p className="mt-2 text-sm text-slate-400">
                     Status: {getPriceStatusLabel(flight.price_status)}
@@ -576,7 +757,11 @@ function SavedTravelPage() {
                   <p className="text-sm text-slate-400">saved price</p>
 
                   <p className="text-xl font-bold text-amber-500">
-                    {flight.currency} {flight.saved_price}
+                    {displayCurrency}{" "}
+                    {convertPrice(
+                      Number(flight.saved_price),
+                      flight.currency
+                    ).toFixed(2)}
                   </p>
 
                   {flight.current_price !== null && (
@@ -586,7 +771,11 @@ function SavedTravelPage() {
                       </p>
 
                       <p className="text-lg font-semibold text-white">
-                        {flight.currency} {flight.current_price}
+                        {displayCurrency}{" "}
+                        {convertPrice(
+                          Number(flight.current_price),
+                          flight.currency
+                        ).toFixed(2)}
                       </p>
                     </>
                   )}
@@ -598,7 +787,7 @@ function SavedTravelPage() {
                           <Bell size={15} className="text-green-400" />
 
                           <p className="text-sm text-green-400">
-                            Alert: {flight.currency} {activeAlert.target_price}
+                            Alert: {activeAlert.target_currency} {activeAlert.target_price}
                           </p>
                         </div>
 
@@ -632,14 +821,18 @@ function SavedTravelPage() {
                           onChange={(event) =>
                             updateAlertInput(itemKey, event.target.value)
                           }
-                          placeholder={`Target in ${flight.currency}`}
+                          placeholder={`Target in ${displayCurrency}`}
                           className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-amber-500 md:w-48"
                         />
+
+                        <p className="mt-1 text-xs text-slate-500">
+                          Alert will be checked and emailed in {displayCurrency}.
+                        </p>
 
                         <button
                           type="button"
                           onClick={() =>
-                            handleSetFlightAlert(flight.id, flight.currency)
+                            handleSetFlightAlert(flight.id)
                           }
                           disabled={updatingAlertItem === itemKey}
                           className="mt-2 inline-flex items-center gap-2 rounded-lg border border-green-500 px-3 py-2 text-sm font-semibold text-green-400 transition hover:bg-green-500 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-60"
@@ -734,7 +927,11 @@ function SavedTravelPage() {
                   <p className="text-sm text-slate-400">saved total</p>
 
                   <p className="text-xl font-bold text-amber-500">
-                    {hotel.currency} {hotel.saved_price}
+                    {displayCurrency}{" "}
+                    {convertPrice(
+                      Number(hotel.saved_price),
+                      hotel.currency
+                    ).toFixed(2)}
                   </p>
 
                   {hotel.current_price !== null && (
@@ -744,7 +941,11 @@ function SavedTravelPage() {
                       </p>
 
                       <p className="text-lg font-semibold text-white">
-                        {hotel.currency} {hotel.current_price}
+                        {displayCurrency}{" "}
+                        {convertPrice(
+                          Number(hotel.current_price),
+                          hotel.currency
+                        ).toFixed(2)}
                       </p>
                     </>
                   )}
@@ -757,7 +958,7 @@ function SavedTravelPage() {
                           <Bell size={15} className="text-green-400" />
 
                           <p className="text-sm text-green-400">
-                            Alert: {hotel.currency} {activeAlert.target_price}
+                            Alert: {activeAlert.target_currency} {activeAlert.target_price}
                           </p>
                         </div>
 
@@ -792,14 +993,18 @@ function SavedTravelPage() {
                           onChange={(event) =>
                             updateAlertInput(itemKey, event.target.value)
                           }
-                          placeholder={`Target in ${hotel.currency}`}
+                          placeholder={`Target in ${displayCurrency}`}
                           className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-amber-500 md:w-48"
                         />
+
+                        <p className="mt-1 text-xs text-slate-500">
+                          Alert will be checked and emailed in {displayCurrency}.
+                        </p>
 
                         <button
                           type="button"
                           onClick={() =>
-                            handleSetHotelAlert(hotel.id, hotel.currency)
+                            handleSetHotelAlert(hotel.id)
                           }
                           disabled={updatingAlertItem === itemKey}
                           className="mt-2 inline-flex items-center gap-2 rounded-lg border border-green-500 px-3 py-2 text-sm font-semibold text-green-400 transition hover:bg-green-500 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-60"
