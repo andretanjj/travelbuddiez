@@ -1,33 +1,19 @@
 import { useEffect, useState } from "react";
-import { Bell, BellOff, Hotel, Plane, RefreshCw, Trash2} from "lucide-react";
+import { Bell, BellOff, Download, FileText, Hotel, Plane, RefreshCw, Trash2, X } from "lucide-react";
 
 import { useAuth } from "../context/AuthContext";
 
-import {
-  deleteSavedFlight,
-  deleteSavedHotel,
-  getSavedFlights,
-  getSavedHotels,
-  refreshSavedFlight,
-  refreshSavedHotel,
-} from "../services/savedTravelApi";
-
-import {
-  createFlightPriceAlert,
-  createHotelPriceAlert,
-  deactivatePriceAlert,
-  getPriceAlerts,
-} from "../services/priceAlertApi";
+import { deleteSavedFlight, deleteSavedHotel, getSavedFlights, getSavedHotels, refreshSavedFlight, refreshSavedHotel } from "../services/savedTravelApi";
+import { createFlightPriceAlert, createHotelPriceAlert, deactivatePriceAlert, getPriceAlerts } from "../services/priceAlertApi";
+import { getCurrencyRate } from "../services/travelApi";
+import { generateTripPlanPdf } from "../services/tripPlanPdf";
 
 import type { PriceAlert } from "../types/priceAlert";
-
 import type { SavedFlight, SavedHotel } from "../types/savedTravel";
 
-import { getCurrencyRate } from "../services/travelApi";
 
 function getPriceStatusLabel(priceStatus: string): string {
-  //Converts backend price status into user-friendly text.
-
+  // Converts backend price status into user-friendly text.
   if (priceStatus === "price_dropped") {
     return "Price dropped";
   }
@@ -47,18 +33,11 @@ function getPriceStatusLabel(priceStatus: string): string {
   return "Saved snapshot";
 }
 
-const SUPPORTED_CURRENCIES = [
-  "SGD",
-  "USD",
-  "EUR",
-  "GBP",
-  "JPY",
-  "KRW",
-  "MYR",
-  "AUD",
-] as const;
+
+const SUPPORTED_CURRENCIES = ["SGD", "USD", "EUR", "GBP", "JPY", "KRW", "MYR", "AUD"] as const;
 
 type SupportedCurrency = (typeof SUPPORTED_CURRENCIES)[number];
+
 
 function SavedTravelPage() {
   const { user, isLoading: isAuthLoading } = useAuth();
@@ -83,39 +62,37 @@ function SavedTravelPage() {
   // Tracks the saved item currently being deleted.
   const [deletingItem, setDeletingItem] = useState<string | null>(null);
 
+  // Enables selection mode for creating a PDF Trip Plan.
+  const [isTripPlanMode, setIsTripPlanMode] = useState(false);
+
+  // Stores IDs of saved flights selected for the PDF.
+  const [selectedFlightIds, setSelectedFlightIds] = useState<number[]>([]);
+
+  // Stores IDs of saved hotels selected for the PDF.
+  const [selectedHotelIds, setSelectedHotelIds] = useState<number[]>([]);
+
   // Shared display-currency preference.
   // Uses the same localStorage key as TravelPlanningPage.
-  const [displayCurrency, setDisplayCurrency] =
-    useState<SupportedCurrency>(() => {
-      const savedCurrency =
-        localStorage.getItem("displayCurrency");
+  const [displayCurrency, setDisplayCurrency] = useState<SupportedCurrency>(() => {
+    const savedCurrency = localStorage.getItem("displayCurrency");
 
-      if (
-        savedCurrency &&
-        SUPPORTED_CURRENCIES.includes(
-          savedCurrency as SupportedCurrency
-        )
-      ) {
-        return savedCurrency as SupportedCurrency;
-      }
+    if (savedCurrency && SUPPORTED_CURRENCIES.includes(savedCurrency as SupportedCurrency)) {
+      return savedCurrency as SupportedCurrency;
+    }
 
-      return "SGD";
-    });
+    return "SGD";
+  });
 
   // Cache exchange rates such as USD-SGD.
   const [currencyRates, setCurrencyRates] = useState<Record<string, number>>({});
 
-  function convertPrice(
-    amount: number,
-    sourceCurrency: string
-  ): number {
+
+  function convertPrice(amount: number, sourceCurrency: string): number {
     if (sourceCurrency === displayCurrency) {
       return amount;
     }
 
-    const rateKey =
-      `${sourceCurrency}-${displayCurrency}`;
-
+    const rateKey = `${sourceCurrency}-${displayCurrency}`;
     const rate = currencyRates[rateKey];
 
     // Keep original value temporarily while the rate loads.
@@ -126,25 +103,19 @@ function SavedTravelPage() {
     return amount * rate;
   }
 
+
   useEffect(() => {
     // Remember the selected currency across pages and browser refreshes.
-    localStorage.setItem(
-      "displayCurrency",
-      displayCurrency
-    );
+    localStorage.setItem("displayCurrency", displayCurrency);
   }, [displayCurrency]);
+
 
   useEffect(() => {
     async function loadCurrencyRates() {
-      // Collect all provider currencies currently stored
-      // in the user's saved travel.
+      // Collect all provider currencies currently stored in saved travel.
       const sourceCurrencies = new Set<string>([
-        ...savedFlights.map(
-          (flight) => flight.currency
-        ),
-        ...savedHotels.map(
-          (hotel) => hotel.currency
-        ),
+        ...savedFlights.map((flight) => flight.currency),
+        ...savedHotels.map((hotel) => hotel.currency),
       ]);
 
       for (const sourceCurrency of sourceCurrencies) {
@@ -152,39 +123,28 @@ function SavedTravelPage() {
           continue;
         }
 
-        const rateKey =
-          `${sourceCurrency}-${displayCurrency}`;
+        const rateKey = `${sourceCurrency}-${displayCurrency}`;
 
         if (currencyRates[rateKey] !== undefined) {
           continue;
         }
 
         try {
-          const response = await getCurrencyRate(
-            sourceCurrency,
-            displayCurrency
-          );
+          const response = await getCurrencyRate(sourceCurrency, displayCurrency);
 
           setCurrencyRates((currentRates) => ({
             ...currentRates,
             [rateKey]: response.rate,
           }));
         } catch (error) {
-          console.error(
-            `Unable to convert ${sourceCurrency} to ${displayCurrency}:`,
-            error
-          );
+          console.error(`Unable to convert ${sourceCurrency} to ${displayCurrency}:`, error);
         }
       }
     }
 
     loadCurrencyRates();
-  }, [
-    savedFlights,
-    savedHotels,
-    displayCurrency,
-    currencyRates,
-  ]);
+  }, [savedFlights, savedHotels, displayCurrency, currencyRates]);
+
 
   useEffect(() => {
     async function loadSavedTravel() {
@@ -227,9 +187,10 @@ function SavedTravelPage() {
     }
   }, [user, isAuthLoading]);
 
+
   useEffect(() => {
     /*
-      Automatically clears refresh/delete/alert feedback after 3 seconds.
+      Automatically clears refresh/delete/alert/export feedback after 3 seconds.
     */
 
     if (!message) {
@@ -246,45 +207,78 @@ function SavedTravelPage() {
 
 
   function getFlightAlert(savedFlightId: number): PriceAlert | undefined {
-    /*
-      Finds the active alert linked to a saved flight.
-    */
-
-    return priceAlerts.find(
-      (alert) =>
-        alert.alert_type === "flight" &&
-        alert.saved_flight_id === savedFlightId &&
-        alert.is_active
-    );
+    // Finds the active alert linked to a saved flight.
+    return priceAlerts.find((alert) => alert.alert_type === "flight" && alert.saved_flight_id === savedFlightId && alert.is_active);
   }
+
 
   function getHotelAlert(savedHotelId: number): PriceAlert | undefined {
-    /*
-      Finds the active alert linked to a saved hotel.
-    */
-
-    return priceAlerts.find(
-      (alert) =>
-        alert.alert_type === "hotel" &&
-        alert.saved_hotel_id === savedHotelId &&
-        alert.is_active
-    );
+    // Finds the active alert linked to a saved hotel.
+    return priceAlerts.find((alert) => alert.alert_type === "hotel" && alert.saved_hotel_id === savedHotelId && alert.is_active);
   }
 
-  function updateAlertInput(itemKey: string, value: string) {
-    /*
-      Updates only the input belonging to the selected saved item.
-    */
 
+  function updateAlertInput(itemKey: string, value: string) {
+    // Updates only the input belonging to the selected saved item.
     setAlertInputs((currentInputs) => ({
       ...currentInputs,
       [itemKey]: value,
     }));
   }
 
-  async function handleSetFlightAlert(
-    savedFlightId: number,
-  ) {
+
+  function toggleFlightSelection(savedFlightId: number) {
+    // Add the flight when unselected, otherwise remove it.
+    setSelectedFlightIds((currentIds) => currentIds.includes(savedFlightId) ? currentIds.filter((id) => id !== savedFlightId) : [...currentIds, savedFlightId]);
+  }
+
+
+  function toggleHotelSelection(savedHotelId: number) {
+    // Add the hotel when unselected, otherwise remove it.
+    setSelectedHotelIds((currentIds) => currentIds.includes(savedHotelId) ? currentIds.filter((id) => id !== savedHotelId) : [...currentIds, savedHotelId]);
+  }
+
+
+  function cancelTripPlanMode() {
+    // Leave selection mode and clear the temporary trip selection.
+    setIsTripPlanMode(false);
+    setSelectedFlightIds([]);
+    setSelectedHotelIds([]);
+  }
+
+
+  async function handleExportTripPlan() {
+    // Build arrays containing only the items selected by the user.
+    const selectedFlights = savedFlights.filter((flight) => selectedFlightIds.includes(flight.id));
+    const selectedHotels = savedHotels.filter((hotel) => selectedHotelIds.includes(hotel.id));
+
+    if (selectedFlights.length === 0 && selectedHotels.length === 0) {
+      setMessage("Select at least one saved flight or hotel.");
+      return;
+    }
+
+    try {
+      await generateTripPlanPdf({
+        flights: selectedFlights,
+        hotels: selectedHotels,
+        priceAlerts,
+        displayCurrency,
+        convertPrice,
+      });
+
+      setMessage("Trip plan PDF exported.");
+      cancelTripPlanMode();
+    } catch (error) {
+      if (error instanceof Error) {
+        setMessage(error.message);
+      } else {
+        setMessage("Unable to export trip plan PDF.");
+      }
+    }
+  }
+
+
+  async function handleSetFlightAlert(savedFlightId: number) {
     /*
       Creates a new alert or updates the existing active alert.
       The backend handles duplicate prevention.
@@ -302,22 +296,14 @@ function SavedTravelPage() {
     setMessage("");
 
     try {
-      const updatedAlert = await createFlightPriceAlert(
-        savedFlightId,
-        targetPrice,
-        displayCurrency
-      );
+      const updatedAlert = await createFlightPriceAlert(savedFlightId, targetPrice, displayCurrency);
 
       setPriceAlerts((currentAlerts) => {
-        const existingIndex = currentAlerts.findIndex(
-          (alert) => alert.id === updatedAlert.id
-        );
+        const existingIndex = currentAlerts.findIndex((alert) => alert.id === updatedAlert.id);
 
         // Replace an existing alert returned by the backend.
         if (existingIndex !== -1) {
-          return currentAlerts.map((alert) =>
-            alert.id === updatedAlert.id ? updatedAlert : alert
-          );
+          return currentAlerts.map((alert) => alert.id === updatedAlert.id ? updatedAlert : alert);
         }
 
         // Add a newly created alert.
@@ -329,9 +315,7 @@ function SavedTravelPage() {
         [itemKey]: "",
       }));
 
-      setMessage(
-        `Flight price alert set for ${displayCurrency} ${targetPrice}.`
-      );
+      setMessage(`Flight price alert set for ${displayCurrency} ${targetPrice}.`);
     } catch (error) {
       if (error instanceof Error) {
         setMessage(error.message);
@@ -343,6 +327,7 @@ function SavedTravelPage() {
     }
   }
 
+
   async function handleDeactivateFlightAlert(alert: PriceAlert) {
     const itemKey = `flight-${alert.saved_flight_id}`;
 
@@ -352,14 +337,8 @@ function SavedTravelPage() {
     try {
       const deactivatedAlert = await deactivatePriceAlert(alert.id);
 
-      // Keep the alert history, but replace it with its inactive version.
-      setPriceAlerts((currentAlerts) =>
-        currentAlerts.map((currentAlert) =>
-          currentAlert.id === deactivatedAlert.id
-            ? deactivatedAlert
-            : currentAlert
-        )
-      );
+      // Keep the alert history but replace it with its inactive version.
+      setPriceAlerts((currentAlerts) => currentAlerts.map((currentAlert) => currentAlert.id === deactivatedAlert.id ? deactivatedAlert : currentAlert));
 
       setMessage("Flight price alert deactivated.");
     } catch (error) {
@@ -373,9 +352,8 @@ function SavedTravelPage() {
     }
   }
 
-  async function handleSetHotelAlert(
-    savedHotelId: number
-  ) {
+
+  async function handleSetHotelAlert(savedHotelId: number) {
     /*
       Creates a new hotel alert or updates its existing active alert.
     */
@@ -392,21 +370,13 @@ function SavedTravelPage() {
     setMessage("");
 
     try {
-      const updatedAlert = await createHotelPriceAlert(
-        savedHotelId,
-        targetPrice,
-        displayCurrency,
-      );
+      const updatedAlert = await createHotelPriceAlert(savedHotelId, targetPrice, displayCurrency);
 
       setPriceAlerts((currentAlerts) => {
-        const alertAlreadyExists = currentAlerts.some(
-          (alert) => alert.id === updatedAlert.id
-        );
+        const alertAlreadyExists = currentAlerts.some((alert) => alert.id === updatedAlert.id);
 
         if (alertAlreadyExists) {
-          return currentAlerts.map((alert) =>
-            alert.id === updatedAlert.id ? updatedAlert : alert
-          );
+          return currentAlerts.map((alert) => alert.id === updatedAlert.id ? updatedAlert : alert);
         }
 
         return [updatedAlert, ...currentAlerts];
@@ -417,9 +387,7 @@ function SavedTravelPage() {
         [itemKey]: "",
       }));
 
-      setMessage(
-        `Hotel price alert set for ${displayCurrency} ${targetPrice}.`
-      );
+      setMessage(`Hotel price alert set for ${displayCurrency} ${targetPrice}.`);
     } catch (error) {
       if (error instanceof Error) {
         setMessage(error.message);
@@ -431,6 +399,7 @@ function SavedTravelPage() {
     }
   }
 
+
   async function handleDeactivateHotelAlert(alert: PriceAlert) {
     const itemKey = `hotel-${alert.saved_hotel_id}`;
 
@@ -440,13 +409,7 @@ function SavedTravelPage() {
     try {
       const deactivatedAlert = await deactivatePriceAlert(alert.id);
 
-      setPriceAlerts((currentAlerts) =>
-        currentAlerts.map((currentAlert) =>
-          currentAlert.id === deactivatedAlert.id
-            ? deactivatedAlert
-            : currentAlert
-        )
-      );
+      setPriceAlerts((currentAlerts) => currentAlerts.map((currentAlert) => currentAlert.id === deactivatedAlert.id ? deactivatedAlert : currentAlert));
 
       setMessage("Hotel price alert deactivated.");
     } catch (error) {
@@ -459,6 +422,7 @@ function SavedTravelPage() {
       setUpdatingAlertItem(null);
     }
   }
+
 
   async function handleDeleteFlight(savedFlightId: number) {
     /*
@@ -477,16 +441,13 @@ function SavedTravelPage() {
       await deleteSavedFlight(savedFlightId);
 
       // Remove the deleted flight without reloading the entire page.
-      setSavedFlights((currentFlights) =>
-        currentFlights.filter((flight) => flight.id !== savedFlightId)
-      );
+      setSavedFlights((currentFlights) => currentFlights.filter((flight) => flight.id !== savedFlightId));
 
       // Remove any linked price alert from the current page state.
-      setPriceAlerts((currentAlerts) =>
-        currentAlerts.filter(
-          (alert) => alert.saved_flight_id !== savedFlightId
-        )
-      );
+      setPriceAlerts((currentAlerts) => currentAlerts.filter((alert) => alert.saved_flight_id !== savedFlightId));
+
+      // Remove the deleted item from the temporary PDF selection if necessary.
+      setSelectedFlightIds((currentIds) => currentIds.filter((id) => id !== savedFlightId));
 
       setMessage("Saved flight removed.");
     } catch (error) {
@@ -514,15 +475,11 @@ function SavedTravelPage() {
     try {
       await deleteSavedHotel(savedHotelId);
 
-      setSavedHotels((currentHotels) =>
-        currentHotels.filter((hotel) => hotel.id !== savedHotelId)
-      );
+      setSavedHotels((currentHotels) => currentHotels.filter((hotel) => hotel.id !== savedHotelId));
+      setPriceAlerts((currentAlerts) => currentAlerts.filter((alert) => alert.saved_hotel_id !== savedHotelId));
 
-      setPriceAlerts((currentAlerts) =>
-        currentAlerts.filter(
-          (alert) => alert.saved_hotel_id !== savedHotelId
-        )
-      );
+      // Remove the deleted item from the temporary PDF selection if necessary.
+      setSelectedHotelIds((currentIds) => currentIds.filter((id) => id !== savedHotelId));
 
       setMessage("Saved hotel removed.");
     } catch (error) {
@@ -535,6 +492,7 @@ function SavedTravelPage() {
       setDeletingItem(null);
     }
   }
+
 
   async function handleRefreshFlight(savedFlightId: number) {
     /*
@@ -551,11 +509,7 @@ function SavedTravelPage() {
       const alertResponse = await getPriceAlerts();
       setPriceAlerts(alertResponse.results);
 
-      setSavedFlights((currentFlights) =>
-        currentFlights.map((flight) =>
-          flight.id === updatedFlight.id ? updatedFlight : flight
-        )
-      );
+      setSavedFlights((currentFlights) => currentFlights.map((flight) => flight.id === updatedFlight.id ? updatedFlight : flight));
 
       setMessage("Flight price refreshed.");
     } catch (error) {
@@ -568,6 +522,7 @@ function SavedTravelPage() {
       setRefreshingItem(null);
     }
   }
+
 
   async function handleRefreshHotel(savedHotelId: number) {
     /*
@@ -584,11 +539,7 @@ function SavedTravelPage() {
       const alertResponse = await getPriceAlerts();
       setPriceAlerts(alertResponse.results);
 
-      setSavedHotels((currentHotels) =>
-        currentHotels.map((hotel) =>
-          hotel.id === updatedHotel.id ? updatedHotel : hotel
-        )
-      );
+      setSavedHotels((currentHotels) => currentHotels.map((hotel) => hotel.id === updatedHotel.id ? updatedHotel : hotel));
 
       setMessage("Hotel price refreshed.");
     } catch (error) {
@@ -602,6 +553,7 @@ function SavedTravelPage() {
     }
   }
 
+
   if (isAuthLoading) {
     return (
       <main className="min-h-screen bg-slate-950 px-6 py-10 text-white">
@@ -611,6 +563,7 @@ function SavedTravelPage() {
       </main>
     );
   }
+
 
   if (user === null) {
     return (
@@ -626,15 +579,61 @@ function SavedTravelPage() {
     );
   }
 
+
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-10 text-white">
       <div className="mx-auto max-w-5xl">
-        <h1 className="mb-2 text-3xl font-bold">Saved Travel</h1>
 
-        <p className="mb-8 text-slate-400">
-          View saved flight and hotel snapshots. Refresh prices before booking
-          because saved prices may become outdated.
-        </p>
+        {/* Saved Travel heading and Trip Plan action. */}
+        <div className="mb-2 flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold">Saved Travel</h1>
+
+            <p className="mt-2 max-w-2xl text-slate-400">
+              View saved flight and hotel snapshots. Refresh prices before booking because saved prices may become outdated.
+            </p>
+          </div>
+
+          {!isTripPlanMode ? (
+            <button type="button" onClick={() => setIsTripPlanMode(true)} disabled={savedFlights.length === 0 && savedHotels.length === 0} className="inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-40">
+              <FileText className="h-4 w-4" />
+              Create Trip Plan
+            </button>
+          ) : (
+            <button type="button" onClick={cancelTripPlanMode} className="inline-flex items-center gap-2 rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-semibold text-slate-300 transition hover:bg-slate-800">
+              <X className="h-4 w-4" />
+              Cancel
+            </button>
+          )}
+        </div>
+
+
+        {/* Trip Plan selection controls. */}
+        {isTripPlanMode && (
+          <div className="mb-6 mt-6 rounded-2xl border border-cyan-400/20 bg-cyan-400/5 p-5">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h2 className="font-semibold text-white">
+                  Create your Trip Plan
+                </h2>
+
+                <p className="mt-1 text-sm text-slate-400">
+                  Select the saved flights and hotels that belong to the trip you want to export.
+                </p>
+              </div>
+
+              <button type="button" onClick={handleExportTripPlan} disabled={selectedFlightIds.length === 0 && selectedHotelIds.length === 0} className="inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-40">
+                <Download className="h-4 w-4" />
+                Export selected as PDF
+              </button>
+            </div>
+
+            <p className="mt-3 text-xs text-slate-500">
+              {selectedFlightIds.length} flight{selectedFlightIds.length === 1 ? "" : "s"} and {selectedHotelIds.length} hotel{selectedHotelIds.length === 1 ? "" : "s"} selected.
+            </p>
+          </div>
+        )}
+
 
         {message && (
           <div className="mb-6 rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-sm text-amber-200">
@@ -643,8 +642,11 @@ function SavedTravelPage() {
         )}
 
         {isLoading && (
-          <p className="mb-6 text-slate-400">Loading saved travel...</p>
+          <p className="mb-6 text-slate-400">
+            Loading saved travel...
+          </p>
         )}
+
 
         {/* Display currency selector */}
         <div className="mb-6 flex items-center justify-end gap-3">
@@ -652,15 +654,7 @@ function SavedTravelPage() {
             Display currency
           </label>
 
-          <select
-            value={displayCurrency}
-            onChange={(event) =>
-              setDisplayCurrency(
-                event.target.value as SupportedCurrency
-              )
-            }
-            className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-amber-500"
-          >
+          <select value={displayCurrency} onChange={(event) => setDisplayCurrency(event.target.value as SupportedCurrency)} className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-amber-500">
             {SUPPORTED_CURRENCIES.map((currency) => (
               <option key={currency} value={currency}>
                 {currency}
@@ -668,6 +662,7 @@ function SavedTravelPage() {
             ))}
           </select>
         </div>
+
 
         <section className="mb-10">
           <div className="mb-4 flex items-center gap-2">
@@ -679,205 +674,174 @@ function SavedTravelPage() {
             {savedFlights.map((flight) => {
               const activeAlert = getFlightAlert(flight.id);
               const itemKey = `flight-${flight.id}`;
+              const isSelectedForTripPlan = selectedFlightIds.includes(flight.id);
 
               return (
-              <div
-                key={flight.id}
-                className="flex flex-col gap-4 rounded-2xl border border-slate-800 bg-slate-900 p-5 md:flex-row md:items-center md:justify-between"
-              >
-                <div>
-                  <h3 className="text-lg font-semibold">
-                    {flight.origin_name} → {flight.destination_name}
-                  </h3>
+                <div key={flight.id} className={`flex flex-col gap-4 rounded-2xl border bg-slate-900 p-5 transition md:flex-row md:items-center md:justify-between ${isSelectedForTripPlan ? "border-cyan-400/50" : "border-slate-800"}`}>
+                  <div className="flex-1">
 
-                  <p className="text-sm text-slate-400">
-                    {flight.origin_code} → {flight.destination_code}
-                  </p>
+                    {/* Only show the PDF selection checkbox while selection mode is enabled. */}
+                    {isTripPlanMode && (
+                      <label className="mb-4 flex cursor-pointer items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/50 px-4 py-3">
+                        <input type="checkbox" checked={isSelectedForTripPlan} onChange={() => toggleFlightSelection(flight.id)} className="h-4 w-4 accent-cyan-500" />
 
-                  <p className="mt-1 text-sm text-slate-400">
-                    {flight.airline} · {flight.duration} · {flight.stops}
-                  </p>
+                        <span className="text-sm font-medium text-slate-300">
+                          Include this flight in Trip Plan
+                        </span>
+                      </label>
+                    )}
 
-                  {flight.return_date && (
-                    <div className="mt-3 rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-2">
-                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                        Return journey
-                      </p>
+                    <h3 className="text-lg font-semibold">
+                      {flight.origin_name} → {flight.destination_name}
+                    </h3>
 
-                      <p className="mt-1 text-sm text-slate-300">
-                        {flight.destination_code} → {flight.origin_code}
-                      </p>
-
-                      {flight.return_flight_number && (
-                        <p className="mt-1 text-xs text-slate-500">
-                          Flight: {flight.return_flight_number}
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  {flight.return_date ? (
-                    <>
-                      <p className="mt-2 inline-flex rounded-full border border-blue-400/30 bg-blue-400/10 px-2 py-1 text-xs font-medium text-blue-300">
-                        Round trip
-                      </p>
-
-                      <p className="mt-2 text-sm text-slate-500">
-                        Outbound: {flight.departure_date}
-                      </p>
-
-                      <p className="mt-1 text-sm text-slate-500">
-                        Return: {flight.return_date}
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <p className="mt-2 inline-flex rounded-full border border-slate-600 bg-slate-800 px-2 py-1 text-xs font-medium text-slate-300">
-                        One way
-                      </p>
-
-                      <p className="mt-2 text-sm text-slate-500">
-                        Departure: {flight.departure_date}
-                      </p>
-                    </>
-                  )}
-
-                  <p className="mt-2 text-sm text-slate-400">
-                    Status: {getPriceStatusLabel(flight.price_status)}
-                  </p>
-
-                  {flight.last_checked_at && (
-                    <p className="mt-1 text-xs text-slate-500">
-                      Last checked: {new Date(flight.last_checked_at).toLocaleString()}
+                    <p className="text-sm text-slate-400">
+                      {flight.origin_code} → {flight.destination_code}
                     </p>
-                  )}
-                </div>
 
-                <div className="text-left md:text-right">
-                  <p className="text-sm text-slate-400">saved price</p>
+                    <p className="mt-1 text-sm text-slate-400">
+                      {flight.airline} · {flight.duration} · {flight.stops}
+                    </p>
 
-                  <p className="text-xl font-bold text-amber-500">
-                    {displayCurrency}{" "}
-                    {convertPrice(
-                      Number(flight.saved_price),
-                      flight.currency
-                    ).toFixed(2)}
-                  </p>
-
-                  {flight.current_price !== null && (
-                    <>
-                      <p className="mt-2 text-sm text-slate-400">
-                        current price
-                      </p>
-
-                      <p className="text-lg font-semibold text-white">
-                        {displayCurrency}{" "}
-                        {convertPrice(
-                          Number(flight.current_price),
-                          flight.currency
-                        ).toFixed(2)}
-                      </p>
-                    </>
-                  )}
-
-                  <div className="mt-4 border-t border-slate-800 pt-4">
-                    {activeAlert ? (
-                      <>
-                        <div className="flex items-center gap-2 md:justify-end">
-                          <Bell size={15} className="text-green-400" />
-
-                          <p className="text-sm text-green-400">
-                            Alert: {activeAlert.target_currency} {activeAlert.target_price}
-                          </p>
-                        </div>
-
-                        <p className="mt-1 text-xs text-slate-500">
-                          Status: {activeAlert.notification_status}
+                    {flight.return_date && (
+                      <div className="mt-3 rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-2">
+                        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                          Return journey
                         </p>
 
-                        <button
-                          type="button"
-                          onClick={() => handleDeactivateFlightAlert(activeAlert)}
-                          disabled={updatingAlertItem === itemKey}
-                          className="mt-3 inline-flex items-center gap-2 rounded-lg border border-red-400/50 px-3 py-2 text-sm text-red-300 transition hover:bg-red-400/10 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          <BellOff size={14} />
-                          {updatingAlertItem === itemKey
-                            ? "Updating..."
-                            : "Deactivate alert"}
-                        </button>
+                        <p className="mt-1 text-sm text-slate-300">
+                          {flight.destination_code} → {flight.origin_code}
+                        </p>
+
+                        {flight.return_flight_number && (
+                          <p className="mt-1 text-xs text-slate-500">
+                            Flight: {flight.return_flight_number}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {flight.return_date ? (
+                      <>
+                        <p className="mt-2 inline-flex rounded-full border border-blue-400/30 bg-blue-400/10 px-2 py-1 text-xs font-medium text-blue-300">
+                          Round trip
+                        </p>
+
+                        <p className="mt-2 text-sm text-slate-500">
+                          Outbound: {flight.departure_date}
+                        </p>
+
+                        <p className="mt-1 text-sm text-slate-500">
+                          Return: {flight.return_date}
+                        </p>
                       </>
                     ) : (
                       <>
-                        <label className="block text-sm text-slate-400">
-                          Price alert target
-                        </label>
-
-                        <input
-                          type="number"
-                          min="0.01"
-                          step="0.01"
-                          value={alertInputs[itemKey] ?? ""}
-                          onChange={(event) =>
-                            updateAlertInput(itemKey, event.target.value)
-                          }
-                          placeholder={`Target in ${displayCurrency}`}
-                          className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-amber-500 md:w-48"
-                        />
-
-                        <p className="mt-1 text-xs text-slate-500">
-                          Alert will be checked and emailed in {displayCurrency}.
+                        <p className="mt-2 inline-flex rounded-full border border-slate-600 bg-slate-800 px-2 py-1 text-xs font-medium text-slate-300">
+                          One way
                         </p>
 
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleSetFlightAlert(flight.id)
-                          }
-                          disabled={updatingAlertItem === itemKey}
-                          className="mt-2 inline-flex items-center gap-2 rounded-lg border border-green-500 px-3 py-2 text-sm font-semibold text-green-400 transition hover:bg-green-500 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          <Bell size={14} />
-                          {updatingAlertItem === itemKey
-                            ? "Setting..."
-                            : "Set alert"}
-                        </button>
+                        <p className="mt-2 text-sm text-slate-500">
+                          Departure: {flight.departure_date}
+                        </p>
                       </>
+                    )}
+
+                    <p className="mt-2 text-sm text-slate-400">
+                      Status: {getPriceStatusLabel(flight.price_status)}
+                    </p>
+
+                    {flight.last_checked_at && (
+                      <p className="mt-1 text-xs text-slate-500">
+                        Last checked: {new Date(flight.last_checked_at).toLocaleString()}
+                      </p>
                     )}
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => handleRefreshFlight(flight.id)}
-                    disabled={refreshingItem === `flight-${flight.id}`}
-                    className="mt-3 inline-flex items-center gap-2 rounded-lg border border-amber-500 px-4 py-2 text-sm font-semibold text-amber-400 transition hover:bg-amber-500 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    <RefreshCw size={14} />
-                    {refreshingItem === `flight-${flight.id}`
-                      ? "Refreshing..."
-                      : "Refresh price"}
-                  </button>
 
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteFlight(flight.id)}
-                    disabled={deletingItem === itemKey}
-                    className="ml-2 mt-3 inline-flex items-center gap-2 rounded-lg border border-red-400/50 px-4 py-2 text-sm font-semibold text-red-300 transition hover:bg-red-400/10 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    <Trash2 size={14} />
+                  <div className="text-left md:text-right">
+                    <p className="text-sm text-slate-400">
+                      saved price
+                    </p>
 
-                    {deletingItem === itemKey ? "Removing..." : "Remove"}
-                  </button>
+                    <p className="text-xl font-bold text-amber-500">
+                      {displayCurrency} {convertPrice(Number(flight.saved_price), flight.currency).toFixed(2)}
+                    </p>
+
+                    {flight.current_price !== null && (
+                      <>
+                        <p className="mt-2 text-sm text-slate-400">
+                          current price
+                        </p>
+
+                        <p className="text-lg font-semibold text-white">
+                          {displayCurrency} {convertPrice(Number(flight.current_price), flight.currency).toFixed(2)}
+                        </p>
+                      </>
+                    )}
+
+                    <div className="mt-4 border-t border-slate-800 pt-4">
+                      {activeAlert ? (
+                        <>
+                          <div className="flex items-center gap-2 md:justify-end">
+                            <Bell size={15} className="text-green-400" />
+
+                            <p className="text-sm text-green-400">
+                              Alert: {activeAlert.target_currency} {activeAlert.target_price}
+                            </p>
+                          </div>
+
+                          <p className="mt-1 text-xs text-slate-500">
+                            Status: {activeAlert.notification_status}
+                          </p>
+
+                          <button type="button" onClick={() => handleDeactivateFlightAlert(activeAlert)} disabled={updatingAlertItem === itemKey} className="mt-3 inline-flex items-center gap-2 rounded-lg border border-red-400/50 px-3 py-2 text-sm text-red-300 transition hover:bg-red-400/10 disabled:cursor-not-allowed disabled:opacity-60">
+                            <BellOff size={14} />
+                            {updatingAlertItem === itemKey ? "Updating..." : "Deactivate alert"}
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <label className="block text-sm text-slate-400">
+                            Price alert target
+                          </label>
+
+                          <input type="number" min="0.01" step="0.01" value={alertInputs[itemKey] ?? ""} onChange={(event) => updateAlertInput(itemKey, event.target.value)} placeholder={`Target in ${displayCurrency}`} className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-amber-500 md:w-48" />
+
+                          <p className="mt-1 text-xs text-slate-500">
+                            Alert will be checked and emailed in {displayCurrency}.
+                          </p>
+
+                          <button type="button" onClick={() => handleSetFlightAlert(flight.id)} disabled={updatingAlertItem === itemKey} className="mt-2 inline-flex items-center gap-2 rounded-lg border border-green-500 px-3 py-2 text-sm font-semibold text-green-400 transition hover:bg-green-500 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-60">
+                            <Bell size={14} />
+                            {updatingAlertItem === itemKey ? "Setting..." : "Set alert"}
+                          </button>
+                        </>
+                      )}
+                    </div>
+
+                    <button type="button" onClick={() => handleRefreshFlight(flight.id)} disabled={refreshingItem === `flight-${flight.id}`} className="mt-3 inline-flex items-center gap-2 rounded-lg border border-amber-500 px-4 py-2 text-sm font-semibold text-amber-400 transition hover:bg-amber-500 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-60">
+                      <RefreshCw size={14} />
+                      {refreshingItem === `flight-${flight.id}` ? "Refreshing..." : "Refresh price"}
+                    </button>
+
+                    <button type="button" onClick={() => handleDeleteFlight(flight.id)} disabled={deletingItem === itemKey} className="ml-2 mt-3 inline-flex items-center gap-2 rounded-lg border border-red-400/50 px-4 py-2 text-sm font-semibold text-red-300 transition hover:bg-red-400/10 disabled:cursor-not-allowed disabled:opacity-60">
+                      <Trash2 size={14} />
+                      {deletingItem === itemKey ? "Removing..." : "Remove"}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
 
             {!isLoading && savedFlights.length === 0 && (
-              <p className="text-slate-400">No saved flights yet.</p>
+              <p className="text-slate-400">
+                No saved flights yet.
+              </p>
             )}
           </div>
         </section>
+
 
         <section>
           <div className="mb-4 flex items-center gap-2">
@@ -889,167 +853,134 @@ function SavedTravelPage() {
             {savedHotels.map((hotel) => {
               const activeAlert = getHotelAlert(hotel.id);
               const itemKey = `hotel-${hotel.id}`;
+              const isSelectedForTripPlan = selectedHotelIds.includes(hotel.id);
 
               return (
-              <div
-                key={hotel.id}
-                className="flex flex-col gap-4 rounded-2xl border border-slate-800 bg-slate-900 p-5 md:flex-row md:items-center md:justify-between"
-              >
-                <div>
-                  <h3 className="text-lg font-semibold">{hotel.hotel_name}</h3>
+                <div key={hotel.id} className={`flex flex-col gap-4 rounded-2xl border bg-slate-900 p-5 transition md:flex-row md:items-center md:justify-between ${isSelectedForTripPlan ? "border-cyan-400/50" : "border-slate-800"}`}>
+                  <div className="flex-1">
 
-                  <p className="text-sm text-slate-400">
-                    {hotel.city}, {hotel.country}
-                  </p>
+                    {/* Only show the PDF selection checkbox while selection mode is enabled. */}
+                    {isTripPlanMode && (
+                      <label className="mb-4 flex cursor-pointer items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/50 px-4 py-3">
+                        <input type="checkbox" checked={isSelectedForTripPlan} onChange={() => toggleHotelSelection(hotel.id)} className="h-4 w-4 accent-cyan-500" />
 
-                  <p className="mt-1 text-sm text-slate-500">
-                    {hotel.check_in_date} → {hotel.check_out_date}
-                  </p>
+                        <span className="text-sm font-medium text-slate-300">
+                          Include this hotel in Trip Plan
+                        </span>
+                      </label>
+                    )}
 
-                  {hotel.rating > 0 && (
-                    <p className="mt-1 text-sm text-slate-400">
-                      Rating: {hotel.rating}/10
+                    <h3 className="text-lg font-semibold">
+                      {hotel.hotel_name}
+                    </h3>
+
+                    <p className="text-sm text-slate-400">
+                      {hotel.city}, {hotel.country}
                     </p>
-                  )}
 
-                  <p className="mt-2 text-sm text-slate-400">
-                    Status: {getPriceStatusLabel(hotel.price_status)}
-                  </p>
-
-                  {hotel.last_checked_at && (
-                    <p className="mt-1 text-xs text-slate-500">
-                      Last checked: {new Date(hotel.last_checked_at).toLocaleString()}
+                    <p className="mt-1 text-sm text-slate-500">
+                      {hotel.check_in_date} → {hotel.check_out_date}
                     </p>
-                  )}
-                </div>
 
-                <div className="text-left md:text-right">
-                  <p className="text-sm text-slate-400">saved total</p>
-
-                  <p className="text-xl font-bold text-amber-500">
-                    {displayCurrency}{" "}
-                    {convertPrice(
-                      Number(hotel.saved_price),
-                      hotel.currency
-                    ).toFixed(2)}
-                  </p>
-
-                  {hotel.current_price !== null && (
-                    <>
-                      <p className="mt-2 text-sm text-slate-400">
-                        current total
+                    {hotel.rating > 0 && (
+                      <p className="mt-1 text-sm text-slate-400">
+                        Rating: {hotel.rating}/10
                       </p>
+                    )}
 
-                      <p className="text-lg font-semibold text-white">
-                        {displayCurrency}{" "}
-                        {convertPrice(
-                          Number(hotel.current_price),
-                          hotel.currency
-                        ).toFixed(2)}
+                    <p className="mt-2 text-sm text-slate-400">
+                      Status: {getPriceStatusLabel(hotel.price_status)}
+                    </p>
+
+                    {hotel.last_checked_at && (
+                      <p className="mt-1 text-xs text-slate-500">
+                        Last checked: {new Date(hotel.last_checked_at).toLocaleString()}
                       </p>
-                    </>
-                  )}
-
-                  {/* Price-alert controls for this saved hotel. */}
-                  <div className="mt-4 border-t border-slate-800 pt-4">
-                    {activeAlert ? (
-                      <>
-                        <div className="flex items-center gap-2 md:justify-end">
-                          <Bell size={15} className="text-green-400" />
-
-                          <p className="text-sm text-green-400">
-                            Alert: {activeAlert.target_currency} {activeAlert.target_price}
-                          </p>
-                        </div>
-
-                        <p className="mt-1 text-xs text-slate-500">
-                          Status: {activeAlert.notification_status}
-                        </p>
-
-                        <button
-                          type="button"
-                          onClick={() => handleDeactivateHotelAlert(activeAlert)}
-                          disabled={updatingAlertItem === itemKey}
-                          className="mt-3 inline-flex items-center gap-2 rounded-lg border border-red-400/50 px-3 py-2 text-sm text-red-300 transition hover:bg-red-400/10 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          <BellOff size={14} />
-
-                          {updatingAlertItem === itemKey
-                            ? "Updating..."
-                            : "Deactivate alert"}
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <label className="block text-sm text-slate-400">
-                          Price alert target
-                        </label>
-
-                        <input
-                          type="number"
-                          min="0.01"
-                          step="0.01"
-                          value={alertInputs[itemKey] ?? ""}
-                          onChange={(event) =>
-                            updateAlertInput(itemKey, event.target.value)
-                          }
-                          placeholder={`Target in ${displayCurrency}`}
-                          className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-amber-500 md:w-48"
-                        />
-
-                        <p className="mt-1 text-xs text-slate-500">
-                          Alert will be checked and emailed in {displayCurrency}.
-                        </p>
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleSetHotelAlert(hotel.id)
-                          }
-                          disabled={updatingAlertItem === itemKey}
-                          className="mt-2 inline-flex items-center gap-2 rounded-lg border border-green-500 px-3 py-2 text-sm font-semibold text-green-400 transition hover:bg-green-500 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          <Bell size={14} />
-
-                          {updatingAlertItem === itemKey
-                            ? "Setting..."
-                            : "Set alert"}
-                        </button>
-                      </>
                     )}
                   </div>
 
-                  {/* Manually refresh the latest hotel price. */}
-                  <button
-                    type="button"
-                    onClick={() => handleRefreshHotel(hotel.id)}
-                    disabled={refreshingItem === `hotel-${hotel.id}`}
-                    className="mt-3 inline-flex items-center gap-2 rounded-lg border border-amber-500 px-4 py-2 text-sm font-semibold text-amber-400 transition hover:bg-amber-500 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    <RefreshCw size={14} />
 
-                    {refreshingItem === `hotel-${hotel.id}`
-                      ? "Refreshing..."
-                      : "Refresh price"}
-                  </button>
+                  <div className="text-left md:text-right">
+                    <p className="text-sm text-slate-400">
+                      saved total
+                    </p>
 
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteHotel(hotel.id)}
-                    disabled={deletingItem === itemKey}
-                    className="ml-2 mt-3 inline-flex items-center gap-2 rounded-lg border border-red-400/50 px-4 py-2 text-sm font-semibold text-red-300 transition hover:bg-red-400/10 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    <Trash2 size={14} />
+                    <p className="text-xl font-bold text-amber-500">
+                      {displayCurrency} {convertPrice(Number(hotel.saved_price), hotel.currency).toFixed(2)}
+                    </p>
 
-                    {deletingItem === itemKey ? "Removing..." : "Remove"}
-                  </button>
+                    {hotel.current_price !== null && (
+                      <>
+                        <p className="mt-2 text-sm text-slate-400">
+                          current total
+                        </p>
+
+                        <p className="text-lg font-semibold text-white">
+                          {displayCurrency} {convertPrice(Number(hotel.current_price), hotel.currency).toFixed(2)}
+                        </p>
+                      </>
+                    )}
+
+                    {/* Price-alert controls for this saved hotel. */}
+                    <div className="mt-4 border-t border-slate-800 pt-4">
+                      {activeAlert ? (
+                        <>
+                          <div className="flex items-center gap-2 md:justify-end">
+                            <Bell size={15} className="text-green-400" />
+
+                            <p className="text-sm text-green-400">
+                              Alert: {activeAlert.target_currency} {activeAlert.target_price}
+                            </p>
+                          </div>
+
+                          <p className="mt-1 text-xs text-slate-500">
+                            Status: {activeAlert.notification_status}
+                          </p>
+
+                          <button type="button" onClick={() => handleDeactivateHotelAlert(activeAlert)} disabled={updatingAlertItem === itemKey} className="mt-3 inline-flex items-center gap-2 rounded-lg border border-red-400/50 px-3 py-2 text-sm text-red-300 transition hover:bg-red-400/10 disabled:cursor-not-allowed disabled:opacity-60">
+                            <BellOff size={14} />
+                            {updatingAlertItem === itemKey ? "Updating..." : "Deactivate alert"}
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <label className="block text-sm text-slate-400">
+                            Price alert target
+                          </label>
+
+                          <input type="number" min="0.01" step="0.01" value={alertInputs[itemKey] ?? ""} onChange={(event) => updateAlertInput(itemKey, event.target.value)} placeholder={`Target in ${displayCurrency}`} className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-amber-500 md:w-48" />
+
+                          <p className="mt-1 text-xs text-slate-500">
+                            Alert will be checked and emailed in {displayCurrency}.
+                          </p>
+
+                          <button type="button" onClick={() => handleSetHotelAlert(hotel.id)} disabled={updatingAlertItem === itemKey} className="mt-2 inline-flex items-center gap-2 rounded-lg border border-green-500 px-3 py-2 text-sm font-semibold text-green-400 transition hover:bg-green-500 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-60">
+                            <Bell size={14} />
+                            {updatingAlertItem === itemKey ? "Setting..." : "Set alert"}
+                          </button>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Manually refresh the latest hotel price. */}
+                    <button type="button" onClick={() => handleRefreshHotel(hotel.id)} disabled={refreshingItem === `hotel-${hotel.id}`} className="mt-3 inline-flex items-center gap-2 rounded-lg border border-amber-500 px-4 py-2 text-sm font-semibold text-amber-400 transition hover:bg-amber-500 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-60">
+                      <RefreshCw size={14} />
+                      {refreshingItem === `hotel-${hotel.id}` ? "Refreshing..." : "Refresh price"}
+                    </button>
+
+                    <button type="button" onClick={() => handleDeleteHotel(hotel.id)} disabled={deletingItem === itemKey} className="ml-2 mt-3 inline-flex items-center gap-2 rounded-lg border border-red-400/50 px-4 py-2 text-sm font-semibold text-red-300 transition hover:bg-red-400/10 disabled:cursor-not-allowed disabled:opacity-60">
+                      <Trash2 size={14} />
+                      {deletingItem === itemKey ? "Removing..." : "Remove"}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
 
             {!isLoading && savedHotels.length === 0 && (
-              <p className="text-slate-400">No saved hotels yet.</p>
+              <p className="text-slate-400">
+                No saved hotels yet.
+              </p>
             )}
           </div>
         </section>
@@ -1057,5 +988,6 @@ function SavedTravelPage() {
     </main>
   );
 }
+
 
 export default SavedTravelPage;
