@@ -1,14 +1,14 @@
 import re
 import requests
-
-# US travel advisory API
-TRAVEL_ADVISORIES_URL = "https://cadataapi.state.gov/api/TravelAdvisories"
+import xml.etree.ElementTree as ET
 
 
-"""
-Converts US advisory levels into map-friendly data.
-Used by MapView for country coloring and tooltip.
-"""
+# Official U.S. Department of State RSS feed for Travel Advisories.
+TRAVEL_ADVISORIES_URL = "https://travel.state.gov/_res/rss/TAsTWs.xml"
+
+
+# Converts U.S. advisory levels into map-friendly data.
+# These values are used by MapView for country colouring and tooltip data.
 ADVISORY_LEVEL_TO_MAP_DATA = {
     1: {
         "mapScore": 90,
@@ -35,8 +35,10 @@ ADVISORY_LEVEL_TO_MAP_DATA = {
 
 def get_default_map_data():
     """
-    Returns default map data when no advisory is avaialble.
-    This prevents frontend from crashing if a country has no advisory matches.
+    Returns default map data when no advisory is available.
+
+    This prevents the frontend from crashing when a destination
+    cannot be matched to an advisory.
     """
     return {
         "mapScore": None,
@@ -47,19 +49,18 @@ def get_default_map_data():
     }
 
 
-def extract_advisory_level(title: str):
+def extract_advisory_level(text: str):
     """
-    Extracts the advisory level from title.
+    Extracts advisory level 1-4 from text.
 
     Example:
-    "Japan - Level 1: Exercise Normal Precautions"
-    returns 1.
+    "Afghanistan Travel Advisory - Level 4: Do Not Travel"
+    returns 4.
     """
-
-    if not title:
+    if not text:
         return None
 
-    match = re.search(r"Level\s*([1-4])", title, re.IGNORECASE)
+    match = re.search(r"Level\s*([1-4])", text, re.IGNORECASE)
 
     if match is None:
         return None
@@ -67,48 +68,27 @@ def extract_advisory_level(title: str):
     return int(match.group(1))
 
 
-def extract_country_code(advisory):
-    """
-    Extracts the code from Category.
-
-    Eg:
-    "Category": ["SG"]
-    returns "sg".
-    """
-
-    category = advisory.get("Category")
-
-    if not category:
-        return None
-
-    if isinstance(category, list) and len(category) > 0:
-        return str(category[0]).lower()
-
-    if isinstance(category, str):
-        return category.lower()
-
-    return None
-
-
 def extract_country_name_from_title(title: str):
     """
-    Extracts country name from the advisory title.
+    Extracts and normalises the country name from an advisory title.
 
     Examples:
-    "Japan - Level 1: Exercise Normal Precautions" -> "japan"
-    "Mexico Travel Advisory - Level 2: Exercise Increased Caution" -> "mexico"
-    """
+    "Japan Travel Advisory - Level 1: Exercise Normal Precautions"
+    -> "japan"
 
+    "Mexico - Level 2: Exercise Increased Caution"
+    -> "mexico"
+    """
     if not title:
         return None
 
-    country_name = title
+    country_name = title.strip()
 
-    # Remove everything from " - Level ..." onwards.
+    # Remove everything beginning from " - Level X".
     country_name = re.sub(r"\s*-\s*Level\s*[1-4].*$", "", country_name, flags=re.IGNORECASE)
 
-    # Remove "Travel Advisory" wording if present.
-    country_name = country_name.replace("Travel Advisory", "")
+    # Remove the standard State Department "Travel Advisory" wording.
+    country_name = re.sub(r"\s*Travel Advisory\s*$", "", country_name, flags=re.IGNORECASE)
 
     country_name = country_name.strip().lower()
 
@@ -119,74 +99,99 @@ def extract_country_name_from_title(title: str):
 
 
 def fetch_us_travel_advisories():
-    response = requests.get(
-        TRAVEL_ADVISORIES_URL,
-        timeout=10,
-    )
+    """
+    Fetches U.S. Department of State Travel Advisories through RSS.
 
-    if response.status_code != 200:
-        print(
-            "US advisory API error:",
-            response.status_code,
-            response.text,
-        )
+    The RSS feed is parsed into the same advisory_map structure already
+    expected by the rest of TravelBuddiez.
+
+    This function does not modify the database directly.
+    """
+    try:
+        response = requests.get(TRAVEL_ADVISORIES_URL, timeout=15)
+
+    except requests.RequestException as error:
+        print("US advisory RSS request failed:", error)
         return {}
 
-    advisories = response.json()
+    if response.status_code != 200:
+        print("US advisory RSS error:", response.status_code, response.text[:200])
+        return {}
+
+    try:
+        root = ET.fromstring(response.content)
+
+    except ET.ParseError as error:
+        print("US advisory RSS XML parse error:", error)
+        return {}
+
     advisory_map = {}
 
-    for advisory in advisories:
-        title = advisory.get("Title", "")
-        country_name = extract_country_name_from_title(title)
-        advisory_level = extract_advisory_level(title)
+    # Standard RSS structure contains multiple <item> entries.
+    for item in root.findall(".//item"):
+        title_element = item.find("title")
+        description_element = item.find("description")
 
-        if country_name is None or advisory_level is None:
+        if title_element is None:
             continue
 
-        map_data = ADVISORY_LEVEL_TO_MAP_DATA.get(
-            advisory_level,
-            get_default_map_data(),
-        )
+        title = title_element.text or ""
+        description = description_element.text if description_element is not None else ""
+
+        # Some RSS feeds may place the level in the title,
+        # while others may include it in the description.
+        combined_text = f"{title} {description or ''}"
+
+        country_name = extract_country_name_from_title(title)
+        advisory_level = extract_advisory_level(combined_text)
+
+        if country_name is None:
+            continue
+
+        if advisory_level is None:
+            continue
+
+        map_data = ADVISORY_LEVEL_TO_MAP_DATA.get(advisory_level)
+
+        if map_data is None:
+            continue
 
         advisory_map[country_name] = {
             "mapScore": map_data["mapScore"],
             "riskLevel": map_data["riskLevel"],
             "condition": map_data["condition"],
             "advisoryLevel": advisory_level,
-            "advisory": (
-                title
-                or "No advisory summary available."
-            ),
+            "advisory": title,
         }
+
+    print("US advisories loaded:", len(advisory_map))
 
     return advisory_map
 
 
 def get_advisory_data_for_destination(destination, advisory_map):
-    country_name = (
-        destination.get("country")
-        or destination.get("country_name")
-        or ""
-    )
+    """
+    Finds advisory data for one TravelBuddiez destination.
 
+    The database country name is normalised before being matched
+    against the RSS advisory map.
+    """
+    country_name = destination.get("country") or destination.get("country_name") or ""
     country_name = country_name.strip().lower()
 
     if not country_name:
         return get_default_map_data()
 
-    return advisory_map.get(
-        country_name,
-        get_default_map_data(),
-    )
+    return advisory_map.get(country_name, get_default_map_data())
+
 
 def get_map_data_for_destination(destination, advisory_map):
     """
-    Gets mapScore, riskLevel, and condition for one destination.
+    Gets the map-related advisory data used by MapView.
 
-    This function does NOT call the external advisory API.
-    It only reads from the advisory_map that was already fetched when the backend started.
+    This does not make another external API request.
+    It reads from the already-created advisory_map.
     """
-
     advisory_data = get_advisory_data_for_destination(destination, advisory_map)
 
     return {
@@ -202,13 +207,10 @@ def get_advisory(destination, advisory_map):
     """
     Gets advisory text for DestinationDashboardPage.
 
-    This replaces the old mock get_advisory(country_code) function.
-    It does NOT call the external advisory API.
-    It only reads from the advisory_map that was already fetched when the backend started.
+    This uses the same advisory data already fetched for map scores.
     """
-
     advisory_data = get_advisory_data_for_destination(destination, advisory_map)
-    
+
     return advisory_data.get(
         "advisory",
         "No advisory information is available for this destination yet.",
